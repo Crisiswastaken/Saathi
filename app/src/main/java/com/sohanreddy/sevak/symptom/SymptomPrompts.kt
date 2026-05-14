@@ -9,12 +9,62 @@ object SymptomPrompts {
      */
     const val HEALTH_TRIGGER_ADDON = """
 
-HEALTH MODE DETECTION (highest priority rule):
-If the user's message describes any physical symptom, bodily discomfort, illness, pain, fever, cough, rash, vomiting, diarrhoea, headache, weakness, or any other health complaint — stop your normal response entirely and return ONLY this exact JSON with no other text:
+HEALTH MODE DETECTION (highest priority rule — overrides everything):
+If ANY of the following are true about the user's message, return ONLY the JSON below:
+1. The user describes a physical symptom (pain, fever, cough, rash, weakness, etc.)
+2. The user names a specific disease they already have (e.g. "I have dengue", "I got malaria")
+3. The user asks to update, report, add, share, or mark a disease on the health map
+4. The user mentions any health complaint or bodily discomfort
+
+When triggered, respond with ONLY this raw JSON — absolutely no other text before or after:
 {"healthMode": true}
 
-Do not add any explanation, greeting, or markdown. Return only the raw JSON object.
-This rule overrides all other instructions when a health symptom is detected."""
+DO NOT add any greeting, acknowledgment, explanation, or markdown.
+DO NOT say "Sure, let me help" or anything similar before the JSON.
+Return EXACTLY the JSON object above and NOTHING else.
+This rule has the HIGHEST priority and overrides all other instructions."""
+
+    /**
+     * Detects when the user is not asking for intake, but is directly reporting
+     * a known disease that should be stored on the map.
+     */
+    fun directDiseaseReportPrompt(language: String): String = """
+You are a strict health-report parser for Saathi.
+The user speaks $language, but your output must be raw JSON only.
+
+Determine if the user is stating a KNOWN disease or condition they already have, OR asking to update/add/mark/report/share it on the community health map.
+
+Examples that ARE direct reports:
+- "I have dengue" → directReport: true
+- "Mark my malaria on the map" → directReport: true
+- "Update dengue fever" → directReport: true
+- "I got diagnosed with typhoid" → directReport: true
+- "Mujhe dengue hai" (Hindi: I have dengue) → directReport: true
+- "I'm suffering from viral fever" → directReport: true
+
+Examples that are NOT direct reports:
+- "I have a headache and fever" → directReport: false (symptoms, not a disease name)
+- "I feel sick" → directReport: false (vague symptoms)
+- "What is dengue?" → directReport: false (asking for info, not reporting)
+
+If YES (direct report), return ONLY:
+{
+  "directReport": true,
+  "disease": "Standard English disease name",
+  "accuracy": 85,
+  "symptoms": ["user-reported disease"],
+  "reasoning": "User directly reported this known condition.",
+  "category": "FEVER"
+}
+
+If NO, return ONLY:
+{"directReport": false}
+
+Rules:
+- "accuracy" should be 75-90 based on how explicit the user's wording is.
+- "category" must be one of: FEVER, RESPIRATORY, GASTROINTESTINAL, SKIN, NEUROLOGICAL, UNKNOWN.
+- Return raw JSON only. No markdown, no explanation, no code fences.
+""".trimIndent()
 
     /**
      * System prompt for the follow-up questioning phase.
@@ -75,9 +125,9 @@ Rules:
 You are Saathi, a caring AI assistant. Respond warmly in $language only.
 
 Tell the user:
-1. A possible condition has been identified as "$disease" with about $accuracy% confidence.
-2. They can help their community by sharing this anonymously on the local disease map so others nearby can stay alert.
-3. Ask them simply: do they want to mark this on the community map? (Yes or No)
+1. Based on your symptoms, this could be "$disease" with about $accuracy% confidence.
+2. They can help their community by sharing this anonymously on the local health map so others nearby can stay alert.
+3. Ask them simply: do they want to mark this on the community health map? (Yes or No)
 
 Keep the message under 3 short sentences. Use simple, friendly words. Do not use medical terminology.
 Speak as if you are a trusted neighbor giving advice.
@@ -91,7 +141,7 @@ Speak as if you are a trusted neighbor giving advice.
 You are Saathi, a caring AI assistant. Respond warmly in $language only.
 
 Based on the symptoms shared, tell the user:
-1. The possible condition is "${prediction.disease}" (confidence: ${prediction.accuracy}%).
+1. This could possibly be "${prediction.disease}" (about ${prediction.accuracy}% confidence).
 2. The main symptoms noted were: ${prediction.symptoms.joinToString(", ")}.
 3. Advise them gently but clearly to visit a nearby doctor or health centre soon for a proper check-up.
 4. Reassure them that this is just a preliminary check and a doctor will give the right treatment.
@@ -101,5 +151,6 @@ Rules:
 - Keep the message under 4 sentences.
 - Do not use technical medical terms.
 - Sound like a caring friend, not a medical report.
+- NEVER say "I diagnose" — always say "this could be" or "this might be".
 """.trimIndent()
 }

@@ -62,7 +62,6 @@ fun SaathiNavGraph(
         composable(Routes.APP) {
             AuthenticatedAppShell(
                 prefs = prefs,
-                navController = navController,
                 onSignOut = {
                     val uid = FirebaseAuth.getInstance().currentUser?.uid
                     if (uid != null) {
@@ -76,13 +75,6 @@ fun SaathiNavGraph(
                         popUpTo(0) { inclusive = true }
                     }
                 }
-            )
-        }
-
-        composable(Routes.DISEASE_MAP) {
-            DiseaseMapScreen(
-                navController = navController,
-                application = application
             )
         }
     }

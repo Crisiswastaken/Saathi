@@ -14,7 +14,7 @@ data class DiseaseReport(
     val language: String = "",
     val userId: String = "",
     val timestamp: Long = 0L,
-    val radius: Int = 500
+    val radius: Int = 1000
 ) {
     companion object {
         fun fromFirestore(doc: DocumentSnapshot): DiseaseReport {
@@ -31,7 +31,7 @@ data class DiseaseReport(
                 language = doc.getString("language") ?: "",
                 userId = doc.getString("userId") ?: "",
                 timestamp = doc.getLong("timestamp") ?: 0L,
-                radius = (doc.getLong("radius") ?: 500L).toInt()
+                radius = (doc.getLong("radius") ?: 1000L).toInt()
             )
         }
     }

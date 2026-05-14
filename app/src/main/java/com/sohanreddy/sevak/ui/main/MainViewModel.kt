@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.location.CurrentLocationRequest
+import com.google.android.gms.location.Granularity
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.firebase.auth.FirebaseAuth
@@ -43,6 +44,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import java.util.Locale
 import java.util.UUID
 
@@ -99,6 +101,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var hasDetectedSpeech = false
     private var ambientNoiseFloor = 0.008f
     private var liveModeEnabled = false
+    @Volatile private var symptomSarvamCode: String = "hi-IN"
 
     init {
         androidTts = TextToSpeech(application) { status ->
@@ -108,6 +111,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Fetch location immediately if permission already granted
         if (hasLocationPermission()) {
             fetchUserLocation()
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            symptomViewModel.ttsOutput.collect { text ->
+                speakViaSarvam(text, symptomSarvamCode)
+            }
         }
 
         // Wire up amplitude callback
@@ -161,6 +170,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     @SuppressLint("MissingPermission")
     fun fetchUserLocation() {
+        viewModelScope.launch(Dispatchers.IO) {
+            getPreciseUserLocation()
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun getPreciseUserLocation(): Pair<Double, Double>? {
+        if (!hasLocationPermission()) return _userLocation.value
+        return try {
+            val request = CurrentLocationRequest.Builder()
+                .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+                .setGranularity(Granularity.GRANULARITY_FINE)
+                .setMaxUpdateAgeMillis(0L)
+                .setDurationMillis(10000L)
+                .build()
+            val location = fusedLocationClient
+                .getCurrentLocation(request, null)
+                .await()
+            val best = location ?: fusedLocationClient.lastLocation.await()
+            if (best != null) {
+                val pair = Pair(best.latitude, best.longitude)
+                _userLocation.value = pair
+                Log.d("MainVM", "Location acquired: ${best.latitude}, ${best.longitude}, acc=${best.accuracy}m")
+                pair
+            } else {
+                Log.w("MainVM", "No location fix available")
+                _userLocation.value
+            }
+        } catch (e: Exception) {
+            Log.e("MainVM", "getPreciseUserLocation failed: ${e.message}", e)
+            _userLocation.value
+        }
+    }
+
+    private fun fetchUserLocationLegacy() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val request = CurrentLocationRequest.Builder()
@@ -379,12 +423,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val savedLangCode2 = prefs.getLanguageCode()
                 val savedLang2 = savedLangCode2?.let { getLanguageByCode(it) }
                 val routingCode = savedLang2?.sarvamCode ?: "hi-IN"
+                symptomSarvamCode = routingCode
                 symptomViewModel.onUserSpoke(transcript)
-                viewModelScope.launch(Dispatchers.IO) {
-                    symptomViewModel.ttsOutput.collect { text ->
-                        if (text != null) speakViaSarvam(text, routingCode)
-                    }
-                }
                 _state.value = _state.value.copy(assistantState = AssistantState.IDLE, audioAmplitude = 0f)
                 scheduleListeningRestart()
                 return@launch
@@ -459,27 +499,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             Log.d("MainVM", "Groq raw response: $rawResponse")
 
             // ── Health-mode detection ────────────────────────────────────
-            if (rawResponse.contains(Regex(""""healthMode"\s*:\s*true""""))) {
+            // Must run BEFORE any TTS/UI update to avoid reading JSON aloud.
+            if (isHealthModeTriggerResponse(rawResponse)) {
                 Log.d("MainVM", "Health mode triggered — starting symptom session")
-                val loc = _userLocation.value
+                // Immediately set IDLE so no stale TTS fires
+                _state.value = _state.value.copy(assistantState = AssistantState.IDLE, audioAmplitude = 0f)
+                symptomSarvamCode = resolvedSarvamCode
+                val loc = getPreciseUserLocation()
                 symptomViewModel.startSession(
                     initialUserSpeech = transcript,
                     language = resolvedLang.englishName,
                     lat = loc?.first ?: 0.0,
                     lng = loc?.second ?: 0.0
                 )
-                // Observe symptomViewModel TTS output on this turn
-                viewModelScope.launch(Dispatchers.IO) {
-                    symptomViewModel.ttsOutput.collect { text ->
-                        if (text != null) speakViaSarvam(text, resolvedSarvamCode)
-                    }
-                }
                 return@launch
             }
 
             // Parse response: extract spoken text and optional image prompt
             val (responseText, imagePrompt) = parseImageTag(rawResponse)
             Log.d("MainVM", "Parsed: text=${responseText.take(80)}, imagePrompt=${imagePrompt ?: "none"}")
+
+            if (looksLikeJson(stripMarkdownJson(responseText))) {
+                Log.w("MainVM", "Suppressing raw JSON response from speech/UI")
+                _state.value = _state.value.copy(assistantState = AssistantState.IDLE, audioAmplitude = 0f)
+                scheduleListeningRestart()
+                return@launch
+            }
 
             _state.update { it.copy(lastResponse = responseText, generatedImage = null) }
 
@@ -558,24 +603,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val hasScreenshot = !screenshotDataUrl.isNullOrBlank()
 
         val systemPrompt = buildString {
-            append("You are Saathi, a helpful AI assistant for rural and semi-urban Indian users.\n")
+            append("You are Saathi, an AI-powered primary healthcare assistant for rural and semi-urban Indian users.\n")
             append("The user speaks $langName. Always respond in $langName only.\n")
-            append("Use extremely simple words. Speak like a helpful neighbor, not a government form.\n")
-            append("Keep responses under 3 sentences. Be direct and actionable.\n")
-            append("If asked about government schemes, give eligibility in one line and the single most important next step. Never use English if the selected language is not English.\n")
-            append("\nIMAGE GENERATION RULE (VERY STRICT — default is NO image):\n")
+            append("Use extremely simple words. Speak like a helpful neighbor, not a doctor or government form.\n")
+            append("Keep responses under 3 sentences. Be direct and actionable.\n\n")
+
+            append("YOUR PRIMARY ROLE — PRIMARY HEALTHCARE SUPPORT:\n")
+            append("1. When a user describes ANY health complaint, symptom, pain, or discomfort:\n")
+            append("   - Acknowledge their concern warmly.\n")
+            append("   - Ask ONE focused follow-up question to narrow down the issue (duration, severity, location, etc.).\n")
+            append("   - Continue asking follow-ups naturally in conversation until you have 3-5 symptoms.\n")
+            append("   - Then provide a preliminary assessment with a confidence percentage.\n")
+            append("   - Always advise visiting a doctor for proper diagnosis.\n")
+            append("2. You can also help with general health advice, nutrition, first aid, and preventive care.\n")
+            append("3. For non-health queries (government schemes, general knowledge), help briefly but gently redirect to health if appropriate.\n\n")
+
+            append("NEVER use technical medical jargon. Explain everything in simple, everyday language.\n")
+            append("NEVER claim to diagnose. Always say 'this might be' or 'this could be'.\n")
+            append("If asked about government schemes, give eligibility in one line and the single most important next step.\n")
+            append("Never use English if the selected language is not English.\n\n")
+
+            append("IMAGE GENERATION RULE (VERY STRICT — default is NO image):\n")
             append("You have the ability to generate ONE image per response by appending a special tag.\n")
             append("However, you must almost NEVER use it. 95% of responses should have NO image.\n")
-            append("DO NOT generate an image for: greetings, introductions, general knowledge, advice, ")
-            append("government schemes, weather, prices, phone numbers, dates, directions, ")
-            append("how-to instructions, opinions, calculations, comparisons, conversations, or ANY abstract topic.\n")
+            append("DO NOT generate an image for: greetings, health advice, symptoms, diagnoses, general knowledge.\n")
             append("ONLY generate an image when ALL of these conditions are true:\n")
             append("1. The user is specifically asking what something PHYSICAL looks like (appearance/identification)\n")
-            append("2. The thing is a real-world visual object: a crop, pest, disease symptom, animal, tool, plant, soil type\n")
+            append("2. The thing is a real-world visual object: a crop, pest, skin rash appearance, animal, tool, plant\n")
             append("3. A voice-only description would genuinely fail to convey the answer\n")
             append("If ALL 3 conditions are met, add EXACTLY ONE line at the very end:\n")
             append("[IMAGE: detailed photorealistic English description]\n")
-            append("When in doubt, do NOT add [IMAGE:]. Voice is always enough.")
+            append("When in doubt, do NOT add [IMAGE:]. Voice is always enough.\n")
             append(SymptomPrompts.HEALTH_TRIGGER_ADDON)
 
             if (liveScreenMode) {
@@ -634,6 +692,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // In live screen mode, attach screenshot for every non-empty user turn so screen guidance works
         // across all supported languages and transliterations.
         return transcript.isNotBlank()
+    }
+
+    private fun isHealthModeTriggerResponse(raw: String): Boolean {
+        val cleaned = stripMarkdownJson(raw)
+        // Try strict JSON parse first
+        try {
+            if (JSONObject(cleaned).optBoolean("healthMode", false)) return true
+        } catch (_: Exception) {}
+        // Fallback: check if the raw text contains the health mode JSON anywhere
+        // This catches cases where the LLM wraps JSON in text or markdown
+        return raw.contains(Regex(""""healthMode"\s*:\s*true"""))
+    }
+
+    private fun stripMarkdownJson(raw: String): String {
+        val fenceRegex = Regex("^```(?:json)?\\s*\\n?(.*?)\\n?```$", RegexOption.DOT_MATCHES_ALL)
+        return fenceRegex.find(raw.trim())?.groupValues?.get(1)?.trim() ?: raw.trim()
+    }
+
+    private fun looksLikeJson(text: String): Boolean {
+        val trimmed = text.trim()
+        return (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+                (trimmed.startsWith("[") && trimmed.endsWith("]"))
     }
 
     private fun fallbackTts(text: String, langCode: String) {

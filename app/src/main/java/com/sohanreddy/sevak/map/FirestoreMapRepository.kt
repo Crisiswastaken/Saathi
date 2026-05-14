@@ -7,9 +7,11 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import kotlin.math.*
 
 private const val COLLECTION = "disease_reports"
 private const val TAG = "FirestoreMapRepo"
+private const val MERGE_RADIUS_METERS = 1000.0
 
 class FirestoreMapRepository {
 
@@ -60,5 +62,17 @@ class FirestoreMapRepository {
                 trySend(reports)
             }
         awaitClose { registration.remove() }
+    }
+
+    /** Haversine distance in meters between two lat/lng points */
+    private fun haversineMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+        val R = 6_371_000.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLng = Math.toRadians(lng2 - lng1)
+        val a = sin(dLat / 2).pow(2) +
+                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
+                sin(dLng / 2).pow(2)
+        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        return R * c
     }
 }

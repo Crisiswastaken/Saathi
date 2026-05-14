@@ -55,7 +55,6 @@ import com.sohanreddy.sevak.ui.theme.SaathiColors
 @Composable
 fun MainScreen(
     prefs: PrefsManager,
-    navController: NavController,
     viewModel: MainViewModel = viewModel(),
     onSignOut: () -> Unit,
     contentPadding: PaddingValues = PaddingValues()
@@ -165,7 +164,6 @@ fun MainScreen(
         // If already granted, MainViewModel.init already called fetchUserLocation()
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -186,14 +184,6 @@ fun MainScreen(
                 .statusBarsPadding()
                 .padding(end = 8.dp, top = 4.dp)
         ) {
-            IconButton(onClick = { navController.navigate(com.sohanreddy.sevak.navigation.Routes.DISEASE_MAP) }) {
-                Icon(
-                    Icons.Default.Map,
-                    contentDescription = "Disease Map",
-                    tint = Color.White.copy(alpha = 0.75f),
-                    modifier = Modifier.size(26.dp)
-                )
-            }
             IconButton(onClick = { showSheet = true }) {
                 Icon(
                     Icons.Default.Settings,

@@ -12,6 +12,7 @@ The following issues were identified in the Saathi Mobile app. Go through the co
                                                                                                     	at retrofit2.KotlinExtensions$await$2$2.onResponse(KotlinExtensions.kt:53)
                                                                                                     	at retrofit2.OkHttpCall$1.onResponse(OkHttpCall.java:164)
                                                                                                     	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:519)
+                           
                                                                                                     	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1154)
                                                                                                     	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:652)
                                                                                                     	at java.lang.Thread.run(Thread.java:1564)
@@ -42,5 +43,9 @@ The image files for all these sections are present in the app\src\main\res\drawa
     -> Me - placeholder for now
 4. The design of the dashboard and the dock should be such that it is easily extendable in the future when we add more features.
 5. Refer to the attached screenshot for the design and use the assets provided in the app\src\main\res\drawable folder to implement the design.
+
+"""
+
+"""
 
 """

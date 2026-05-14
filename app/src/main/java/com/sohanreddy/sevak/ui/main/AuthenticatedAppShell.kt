@@ -50,6 +50,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.sohanreddy.sevak.R
 import com.sohanreddy.sevak.data.PrefsManager
+import com.sohanreddy.sevak.ui.map.DiseaseMapScreen
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -117,7 +118,7 @@ private data class AppDestination(
 
         val dockItems = listOf(Home, Pulse, Saathi, Radar, Me)
         val dashboardCards = listOf(Saathi, Pulse, Radar)
-        val placeholderItems = listOf(Pulse, Radar, Me)
+        val placeholderItems = listOf(Pulse, Me)
 
         fun fromRoute(route: String?): AppDestination {
             return dockItems.firstOrNull { it.route == route } ?: Home
@@ -177,6 +178,12 @@ fun AuthenticatedAppShell(
                 MainScreen(
                     prefs = prefs,
                     onSignOut = onSignOut,
+                    contentPadding = innerPadding
+                )
+            }
+
+            composable(AppDestination.Radar.route) {
+                DiseaseMapScreen(
                     contentPadding = innerPadding
                 )
             }
