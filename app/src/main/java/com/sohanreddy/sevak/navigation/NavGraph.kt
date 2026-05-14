@@ -10,8 +10,7 @@ import com.sohanreddy.sevak.data.PrefsManager
 import com.sohanreddy.sevak.data.rag.VectorStoreManager
 import com.sohanreddy.sevak.ui.auth.OtpScreen
 import com.sohanreddy.sevak.ui.auth.PhoneEntryScreen
-import com.sohanreddy.sevak.ui.main.MainScreen
-import com.sohanreddy.sevak.ui.map.DiseaseMapScreen
+import com.sohanreddy.sevak.ui.main.AuthenticatedAppShell
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -19,8 +18,7 @@ import kotlinx.coroutines.launch
 object Routes {
     const val PHONE = "phone"
     const val OTP = "otp"
-    const val MAIN = "main"
-    const val DISEASE_MAP = "disease_map"
+    const val APP = "app"
 }
 
 @Composable
@@ -29,11 +27,9 @@ fun SaathiNavGraph(
     prefs: PrefsManager,
     application: android.app.Application
 ) {
-    // Determine start destination — skip language picker entirely
     val currentUser = FirebaseAuth.getInstance().currentUser
-    val startDest = if (currentUser == null) Routes.PHONE else Routes.MAIN
+    val startDest = if (currentUser == null) Routes.PHONE else Routes.APP
 
-    // Shared state for passing OTP data between screens
     var verificationId by remember { mutableStateOf("") }
     var phoneNumber by remember { mutableStateOf("") }
     var resendToken by remember { mutableStateOf<PhoneAuthProvider.ForceResendingToken?>(null) }
@@ -56,16 +52,15 @@ fun SaathiNavGraph(
                 phone = phoneNumber,
                 resendToken = resendToken,
                 onVerified = {
-                    // Go straight to main screen after auth — no language picker
-                    navController.navigate(Routes.MAIN) {
+                    navController.navigate(Routes.APP) {
                         popUpTo(0) { inclusive = true }
                     }
                 }
             )
         }
 
-        composable(Routes.MAIN) {
-            MainScreen(
+        composable(Routes.APP) {
+            AuthenticatedAppShell(
                 prefs = prefs,
                 navController = navController,
                 onSignOut = {

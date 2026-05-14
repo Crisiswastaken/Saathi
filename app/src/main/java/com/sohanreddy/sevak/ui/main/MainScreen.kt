@@ -57,7 +57,8 @@ fun MainScreen(
     prefs: PrefsManager,
     navController: NavController,
     viewModel: MainViewModel = viewModel(),
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    contentPadding: PaddingValues = PaddingValues()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState()
@@ -165,6 +166,11 @@ fun MainScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(contentPadding)
+    ) {
         // ── Background image ────────────────────────────────────────
         Image(
             painter = painterResource(R.drawable.background),
