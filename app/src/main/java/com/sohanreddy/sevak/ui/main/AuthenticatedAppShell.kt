@@ -51,6 +51,7 @@ import androidx.navigation.compose.rememberNavController
 import com.sohanreddy.sevak.R
 import com.sohanreddy.sevak.data.PrefsManager
 import com.sohanreddy.sevak.ui.map.DiseaseMapScreen
+import com.sohanreddy.sevak.ui.pulse.PulseScreen
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -118,7 +119,7 @@ private data class AppDestination(
 
         val dockItems = listOf(Home, Pulse, Saathi, Radar, Me)
         val dashboardCards = listOf(Saathi, Pulse, Radar)
-        val placeholderItems = listOf(Pulse, Me)
+        val placeholderItems = listOf(Me)
 
         fun fromRoute(route: String?): AppDestination {
             return dockItems.firstOrNull { it.route == route } ?: Home
@@ -209,6 +210,12 @@ fun AuthenticatedAppShell(
                     reportId = entry.arguments?.getString("reportId"),
                     contentPadding = innerPadding,
                     onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(AppDestination.Pulse.route) {
+                PulseScreen(
+                    contentPadding = innerPadding
                 )
             }
 

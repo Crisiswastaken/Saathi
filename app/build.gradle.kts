@@ -131,6 +131,12 @@ dependencies {
     // ONNX Runtime for on-device embeddings
     implementation(libs.onnxruntime.android)
 
+    // CameraX for PPG vital signs measurement
+    val cameraxVersion = "1.4.1"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
