@@ -13,17 +13,17 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,7 +37,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -57,7 +56,9 @@ fun MainScreen(
     prefs: PrefsManager,
     viewModel: MainViewModel = viewModel(),
     onSignOut: () -> Unit,
-    contentPadding: PaddingValues = PaddingValues()
+    contentPadding: PaddingValues = PaddingValues(),
+    onOpenDocuments: () -> Unit = {},
+    onOpenReports: () -> Unit = {}
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState()
@@ -114,6 +115,10 @@ fun MainScreen(
     val currentLangCode = state.detectedLangCode
         ?: prefs.getLanguageCode()
         ?: "en"
+    var selectedLangCode by remember(currentLangCode) { mutableStateOf(currentLangCode) }
+    var languageMenuExpanded by remember { mutableStateOf(false) }
+    val selectedLanguage = supportedLanguages.firstOrNull { it.code == selectedLangCode }
+        ?: supportedLanguages.firstOrNull { it.code == "en" }
 
     // Permission launcher
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -177,20 +182,60 @@ fun MainScreen(
             modifier = Modifier.fillMaxSize()
         )
 
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.28f),
+                            Color.White.copy(alpha = 0.10f),
+                            Color(0xFFFDF7FB).copy(alpha = 0.42f)
+                        )
+                    )
+                )
+        )
+
         // ── Settings icon — top right ──────────────────────────────────────
         Row(
             modifier = Modifier
-                .align(Alignment.TopEnd)
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
                 .statusBarsPadding()
-                .padding(end = 8.dp, top = 4.dp)
+                .padding(start = 24.dp, top = 18.dp, end = 20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { showSheet = true }) {
-                Icon(
-                    Icons.Default.Settings,
-                    contentDescription = "Settings",
-                    tint = Color.White.copy(alpha = 0.75f),
-                    modifier = Modifier.size(26.dp)
+            Column {
+                Text(
+                    text = "Saathi",
+                    color = Color(0xFF10233F),
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.ExtraBold
                 )
+                Text(
+                    text = selectedLanguage?.englishName ?: "English",
+                    color = Color(0xFF566983),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Color.White.copy(alpha = 0.88f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.76f)),
+                shadowElevation = 12.dp,
+                tonalElevation = 2.dp
+            ) {
+                IconButton(onClick = { showSheet = true }) {
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = Color(0xFF566983),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
 
@@ -206,8 +251,8 @@ fun MainScreen(
             // Clickable waveform area
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(170.dp)
+                    .width(340.dp)
+                    .height(132.dp)
                     .clickable(
                         interactionSource = waveformInteraction,
                         indication = null
@@ -221,7 +266,9 @@ fun MainScreen(
                 contentAlignment = Alignment.Center
             ) {
                 WaveformCanvas(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(112.dp),
                     isActive = state.assistantState == AssistantState.LISTENING ||
                             state.assistantState == AssistantState.SPEAKING,
                     isStatic = state.assistantState == AssistantState.PROCESSING,
@@ -235,13 +282,14 @@ fun MainScreen(
             Text(
                 text = getStatusText(state.assistantState.name, currentLangCode),
                 color = when (state.assistantState) {
-                    AssistantState.LISTENING -> Color(0xCC64A0FF)
-                    AssistantState.SPEAKING -> Color(0xCC64A0FF)
-                    else -> Color.White.copy(alpha = 0.45f)
+                    AssistantState.LISTENING -> Color(0xFF5D8DFF)
+                    AssistantState.SPEAKING -> Color(0xFFF65987)
+                    AssistantState.PROCESSING -> Color(0xFF20B79B)
+                    else -> Color(0xFF6F7FA0)
                 },
-                fontSize = 13.sp,
-                letterSpacing = 1.5.sp,
-                fontWeight = FontWeight.Normal
+                fontSize = 16.sp,
+                letterSpacing = 1.2.sp,
+                fontWeight = FontWeight.SemiBold
             )
         }
 
@@ -287,60 +335,13 @@ fun MainScreen(
             }
         }
 
-        // Quick share logo launcher in bottom-right corner.
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .navigationBarsPadding()
-                .padding(end = 14.dp, bottom = 20.dp)
-                .size(84.dp)
-                .drawBehind {
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color(0x804E9EFF),
-                                Color(0x4D4E9EFF),
-                                Color.Transparent
-                            ),
-                            center = center,
-                            radius = size.minDimension * 0.52f
-                        ),
-                        radius = size.minDimension * 0.52f,
-                        center = center
-                    )
-                }
-                .clickable {
-                    if (viewModel.hasAudioPermission()) {
-                        if (Settings.canDrawOverlays(context)) {
-                            launchProjectionRequest()
-                        } else {
-                            val overlayIntent = Intent(
-                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                Uri.parse("package:${context.packageName}")
-                            )
-                            overlayPermissionLauncher.launch(overlayIntent)
-                        }
-                    } else {
-                        screenShareAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    }
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = painterResource(R.drawable.saathi_logo),
-                contentDescription = "Share screen",
-                modifier = Modifier.size(54.dp),
-                contentScale = ContentScale.Crop
-            )
-        }
-
         // ── Settings bottom sheet ───────────────────────────────────
         if (showSheet) {
             ModalBottomSheet(
                 onDismissRequest = { showSheet = false },
                 sheetState = sheetState,
-                containerColor = Color(0xE60C1C41),
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                containerColor = Color.White.copy(alpha = 0.96f),
+                shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
                 dragHandle = {
                     Box(
                         modifier = Modifier
@@ -348,72 +349,81 @@ fun MainScreen(
                             .width(40.dp)
                             .height(4.dp)
                             .clip(RoundedCornerShape(2.dp))
-                            .background(SaathiColors.PrimaryBright.copy(alpha = 0.4f))
+                            .background(Color(0xFFD9E4F5))
                     )
                 }
             ) {
                 Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
                     Text(
-                        "Change Language",
-                        fontSize = 18.sp,
+                        "Saathi settings",
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
-                        color = SaathiColors.TextPrimary,
+                        color = Color(0xFF10233F),
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
 
                     // Language grid — 2 columns
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.heightIn(max = 320.dp)
+                    ExposedDropdownMenuBox(
+                        expanded = languageMenuExpanded,
+                        onExpandedChange = { languageMenuExpanded = !languageMenuExpanded }
                     ) {
-                        items(supportedLanguages) { lang ->
-                            val isSelected = currentLangCode == lang.code
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
+                        OutlinedTextField(
+                            value = selectedLanguage?.let { "${it.displayName}  ${it.englishName}" } ?: "English",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Conversation language") },
+                            trailingIcon = {
+                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
+                            },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp)
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = languageMenuExpanded,
+                            onDismissRequest = { languageMenuExpanded = false }
+                        ) {
+                            supportedLanguages.forEach { lang ->
+                                DropdownMenuItem(
+                                    text = { Text("${lang.displayName}  ${lang.englishName}") },
+                                    onClick = {
+                                        selectedLangCode = lang.code
+                                        languageMenuExpanded = false
                                         viewModel.setLanguageManually(lang.code, lang.englishName)
-                                        showSheet = false
-                                    },
-                                shape = RoundedCornerShape(14.dp),
-                                color = if (isSelected)
-                                    SaathiColors.PrimaryBright.copy(alpha = 0.25f)
-                                else
-                                    Color.White.copy(alpha = 0.06f),
-                                border = if (isSelected)
-                                    androidx.compose.foundation.BorderStroke(1.dp, SaathiColors.PrimaryBright.copy(alpha = 0.5f))
-                                else
-                                    androidx.compose.foundation.BorderStroke(1.dp, SaathiColors.CardBorder)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(vertical = 14.dp, horizontal = 12.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(
-                                        text = lang.displayName,
-                                        fontSize = 18.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (isSelected) SaathiColors.PrimaryBright else Color.White,
-                                        textAlign = TextAlign.Center
-                                    )
-                                    Text(
-                                        text = lang.englishName,
-                                        fontSize = 12.sp,
-                                        color = if (isSelected)
-                                            SaathiColors.PrimaryBright.copy(alpha = 0.7f)
-                                        else
-                                            Color.White.copy(alpha = 0.4f),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
+                                    }
+                                )
                             }
                         }
                     }
 
+                    Spacer(Modifier.height(12.dp))
+
+                    Spacer(Modifier.height(2.dp))
+                    SettingsSheetCard(
+                        title = "Upload documents",
+                        body = "Manage prescriptions, lab files, and notes stored on this device.",
+                        accent = Color(0xFF5D8DFF),
+                        icon = { Icon(Icons.Default.Folder, contentDescription = null, tint = Color.White) },
+                        onClick = {
+                            showSheet = false
+                            onOpenDocuments()
+                        }
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    SettingsSheetCard(
+                        title = "Report viewer",
+                        body = "Create, view, edit, and delete local health summary reports.",
+                        accent = Color(0xFFF65987),
+                        icon = { Icon(Icons.Default.Article, contentDescription = null, tint = Color.White) },
+                        onClick = {
+                            showSheet = false
+                            onOpenReports()
+                        }
+                    )
                     Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                    HorizontalDivider(color = Color(0xFFE7EEF9))
                     Spacer(Modifier.height(8.dp))
 
                     Text(
@@ -430,6 +440,54 @@ fun MainScreen(
                     )
                     Spacer(Modifier.height(32.dp))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSheetCard(
+    title: String,
+    body: String,
+    accent: Color,
+    icon: @Composable BoxScope.() -> Unit,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(22.dp),
+        color = Color(0xFFF7FAFF),
+        border = BorderStroke(1.dp, Color(0xFFE3ECF8)),
+        shadowElevation = 4.dp,
+        tonalElevation = 1.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .background(accent, RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center,
+                content = icon
+            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    title,
+                    color = Color(0xFF10233F),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    body,
+                    color = Color(0xFF566983),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
             }
         }
     }

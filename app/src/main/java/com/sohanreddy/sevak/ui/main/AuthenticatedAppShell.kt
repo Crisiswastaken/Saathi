@@ -133,29 +133,33 @@ fun AuthenticatedAppShell(
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentDestination = AppDestination.fromRoute(navBackStackEntry?.destination?.route)
+    val currentRoute = navBackStackEntry?.destination?.route
+    val currentDestination = AppDestination.fromRoute(currentRoute)
+    val showDock = AppDestination.dockItems.any { it.route == currentRoute }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            SaathiBottomDock(
-                items = AppDestination.dockItems,
-                currentRoute = currentDestination.route,
-                onDestinationSelected = { destination ->
-                    if (destination.route == currentDestination.route) {
-                        return@SaathiBottomDock
-                    }
-                    navController.navigate(destination.route) {
-                        launchSingleTop = true
-                        restoreState = true
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
+            if (showDock) {
+                SaathiBottomDock(
+                    items = AppDestination.dockItems,
+                    currentRoute = currentDestination.route,
+                    onDestinationSelected = { destination ->
+                        if (destination.route == currentDestination.route) {
+                            return@SaathiBottomDock
+                        }
+                        navController.navigate(destination.route) {
+                            launchSingleTop = true
+                            restoreState = true
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
                         }
                     }
-                }
-            )
+                )
+            }
         }
     ) { innerPadding ->
         NavHost(
@@ -178,7 +182,33 @@ fun AuthenticatedAppShell(
                 MainScreen(
                     prefs = prefs,
                     onSignOut = onSignOut,
-                    contentPadding = innerPadding
+                    contentPadding = innerPadding,
+                    onOpenDocuments = { navController.navigate("saathi_documents") },
+                    onOpenReports = { navController.navigate("saathi_reports") }
+                )
+            }
+
+            composable("saathi_documents") {
+                DocumentManagerScreen(
+                    contentPadding = innerPadding,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable("saathi_reports") {
+                ReportManagerScreen(
+                    contentPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onCreateReport = { navController.navigate("saathi_report_editor/new") },
+                    onEditReport = { reportId -> navController.navigate("saathi_report_editor/$reportId") }
+                )
+            }
+
+            composable("saathi_report_editor/{reportId}") { entry ->
+                ReportEditorScreen(
+                    reportId = entry.arguments?.getString("reportId"),
+                    contentPadding = innerPadding,
+                    onBack = { navController.popBackStack() }
                 )
             }
 
