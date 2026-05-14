@@ -23,3 +23,24 @@ The following issues were identified in the Saathi Mobile app. Go through the co
 to fix these issue first go through the codebase in detail, identify the root cause of these issues, use web search mcp to find appropriate fixes and only once confirmed, implement the fixes. 
 
 """
+
+
+
+"""
+Major Design Revamp:
+1. Currently when the user logs in they are directly redirected to the main talking page. Now since we are adding a ton more features to the app, we need to do a major design revamp. 
+2. After the user logs in, they should be taken to a home page/dashboard. (Refer to the attached Screenshot for reference) This page will have the following options:
+    -> Saathi - redirects to the main talking page where the user can talk to the ai and have a conversation. This is the current main talking page that we have, we will just be redirecting to it from the dashboard when the user clicks on saathi.
+    -> Pulse - Currently placeholder
+    -> Radar - Currently placeholder
+The image files for all these sections are present in the app\src\main\res\drawable\section folder. Update accordingly.
+3. Further a Dock/Footer needs to be added to the app, which will be visible on all pages. This dock will have 5 redirects, icons for each are present in the app\src\main\res\drawable\dock folder. The redirects are as follows:
+    -> Home - redirects to the dashboard/homepage
+    -> Pulse - placeholder for now
+    -> Saathi - redirects to the main talking page
+    -> Radar - placeholder for now
+    -> Me - placeholder for now
+4. The design of the dashboard and the dock should be such that it is easily extendable in the future when we add more features.
+5. Refer to the attached screenshot for the design and use the assets provided in the app\src\main\res\drawable folder to implement the design.
+
+"""
