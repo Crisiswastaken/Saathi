@@ -11,6 +11,7 @@ import com.sohanreddy.sevak.data.rag.VectorStoreManager
 import com.sohanreddy.sevak.ui.auth.OtpScreen
 import com.sohanreddy.sevak.ui.auth.PhoneEntryScreen
 import com.sohanreddy.sevak.ui.main.MainScreen
+import com.sohanreddy.sevak.ui.map.DiseaseMapScreen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -19,12 +20,14 @@ object Routes {
     const val PHONE = "phone"
     const val OTP = "otp"
     const val MAIN = "main"
+    const val DISEASE_MAP = "disease_map"
 }
 
 @Composable
 fun SaathiNavGraph(
     navController: NavHostController,
-    prefs: PrefsManager
+    prefs: PrefsManager,
+    application: android.app.Application
 ) {
     // Determine start destination — skip language picker entirely
     val currentUser = FirebaseAuth.getInstance().currentUser
@@ -64,8 +67,8 @@ fun SaathiNavGraph(
         composable(Routes.MAIN) {
             MainScreen(
                 prefs = prefs,
+                navController = navController,
                 onSignOut = {
-                    // Clean up RAG data for current user before signing out
                     val uid = FirebaseAuth.getInstance().currentUser?.uid
                     if (uid != null) {
                         CoroutineScope(Dispatchers.IO).launch {
@@ -78,6 +81,13 @@ fun SaathiNavGraph(
                         popUpTo(0) { inclusive = true }
                     }
                 }
+            )
+        }
+
+        composable(Routes.DISEASE_MAP) {
+            DiseaseMapScreen(
+                navController = navController,
+                application = application
             )
         }
     }

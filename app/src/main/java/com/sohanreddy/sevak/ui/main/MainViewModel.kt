@@ -1,11 +1,19 @@
 package com.sohanreddy.sevak.ui.main
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.app.Application
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.android.gms.location.CurrentLocationRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.google.firebase.auth.FirebaseAuth
 import com.sohanreddy.sevak.Constants
 import com.sohanreddy.sevak.audio.AudioHelper
@@ -15,16 +23,22 @@ import com.sohanreddy.sevak.data.getLanguageBySarvamCode
 import com.sohanreddy.sevak.data.rag.ContextBuilder
 import com.sohanreddy.sevak.data.rag.EmbeddingManager
 import com.sohanreddy.sevak.data.rag.VectorStoreManager
+import com.sohanreddy.sevak.map.FirestoreMapRepository
 import com.sohanreddy.sevak.network.*
 import com.sohanreddy.sevak.network.ImageGenerationRepository
+import com.sohanreddy.sevak.symptom.SymptomPrompts
+import com.sohanreddy.sevak.symptom.SymptomState
+import com.sohanreddy.sevak.symptom.SymptomViewModel
 import com.sohanreddy.sevak.screenshare.ScreenShareSessionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -46,6 +60,22 @@ data class MainScreenState(
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(MainScreenState())
     val state = _state.asStateFlow()
+
+    // ── Symptom sub-ViewModel ────────────────────────────────────────────
+    val symptomViewModel = SymptomViewModel(
+        groqApiService = GroqApi.service,
+        firestoreRepo = FirestoreMapRepository(),
+        groqApiKey = Constants.GROQ_API_KEY
+    )
+    val isSymptomModeActive: Boolean
+        get() = symptomViewModel.state.value !is SymptomState.Idle
+
+    // ── Location ────────────────────────────────────────────────────────
+    private val _userLocation = MutableStateFlow<Pair<Double, Double>?>(null)
+    val userLocation: StateFlow<Pair<Double, Double>?> = _userLocation.asStateFlow()
+
+    private val fusedLocationClient =
+        LocationServices.getFusedLocationProviderClient(application)
 
     private val audioHelper = AudioHelper(application)
     private val prefs = PrefsManager(application)
@@ -73,6 +103,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         androidTts = TextToSpeech(application) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
+        }
+
+        // Fetch location immediately if permission already granted
+        if (hasLocationPermission()) {
+            fetchUserLocation()
         }
 
         // Wire up amplitude callback
@@ -111,6 +146,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun hasAudioPermission(): Boolean = audioHelper.hasPermission()
+
+    fun hasLocationPermission(): Boolean {
+        val ctx = getApplication<Application>()
+        return ContextCompat.checkSelfPermission(
+            ctx, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    /**
+     * Called from [MainScreen] once ACCESS_FINE_LOCATION is granted.
+     * Fetches the device's current location once and updates [userLocation].
+     * Safe to call multiple times — subsequent calls are no-ops if location is already known.
+     */
+    @SuppressLint("MissingPermission")
+    fun fetchUserLocation() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val request = CurrentLocationRequest.Builder()
+                    .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+                    .build()
+                val location = fusedLocationClient
+                    .getCurrentLocation(request, null)
+                    .await()
+                if (location != null) {
+                    _userLocation.value = Pair(location.latitude, location.longitude)
+                    Log.d("MainVM", "Location acquired: ${location.latitude}, ${location.longitude}")
+                } else {
+                    Log.w("MainVM", "getCurrentLocation returned null — using last known location")
+                    // Fall back to last known location
+                    val last = fusedLocationClient.lastLocation.await()
+                    if (last != null) {
+                        _userLocation.value = Pair(last.latitude, last.longitude)
+                        Log.d("MainVM", "Last location: ${last.latitude}, ${last.longitude}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MainVM", "fetchUserLocation failed: ${e.message}", e)
+            }
+        }
+    }
 
     /** Called from settings when user manually picks a language */
     fun setLanguageManually(code: String, name: String) {
@@ -298,6 +373,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
+            // ── Route to symptom ViewModel when health mode is active ───────────
+            if (isSymptomModeActive) {
+                Log.d("MainVM", "Symptom mode active, routing transcript to SymptomViewModel")
+                val savedLangCode2 = prefs.getLanguageCode()
+                val savedLang2 = savedLangCode2?.let { getLanguageByCode(it) }
+                val routingCode = savedLang2?.sarvamCode ?: "hi-IN"
+                symptomViewModel.onUserSpoke(transcript)
+                viewModelScope.launch(Dispatchers.IO) {
+                    symptomViewModel.ttsOutput.collect { text ->
+                        if (text != null) speakViaSarvam(text, routingCode)
+                    }
+                }
+                _state.value = _state.value.copy(assistantState = AssistantState.IDLE, audioAmplitude = 0f)
+                scheduleListeningRestart()
+                return@launch
+            }
+
             // Resolve the language to use for LLM + TTS
             // Priority: detected language from STT > saved language > default hi-IN
             val resolvedSarvamCode: String
@@ -366,6 +458,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val rawResponse = callGroq(transcript, langName, ragContext, screenshotDataUrl)
             Log.d("MainVM", "Groq raw response: $rawResponse")
 
+            // ── Health-mode detection ────────────────────────────────────
+            if (rawResponse.contains(Regex(""""healthMode"\s*:\s*true""""))) {
+                Log.d("MainVM", "Health mode triggered — starting symptom session")
+                val loc = _userLocation.value
+                symptomViewModel.startSession(
+                    initialUserSpeech = transcript,
+                    language = resolvedLang.englishName,
+                    lat = loc?.first ?: 0.0,
+                    lng = loc?.second ?: 0.0
+                )
+                // Observe symptomViewModel TTS output on this turn
+                viewModelScope.launch(Dispatchers.IO) {
+                    symptomViewModel.ttsOutput.collect { text ->
+                        if (text != null) speakViaSarvam(text, resolvedSarvamCode)
+                    }
+                }
+                return@launch
+            }
+
             // Parse response: extract spoken text and optional image prompt
             val (responseText, imagePrompt) = parseImageTag(rawResponse)
             Log.d("MainVM", "Parsed: text=${responseText.take(80)}, imagePrompt=${imagePrompt ?: "none"}")
@@ -397,35 +508,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             // Call Sarvam TTS
-            _state.value = _state.value.copy(assistantState = AssistantState.SPEAKING)
-            try {
-                Log.d("MainVM", "Calling Sarvam TTS with lang=$resolvedSarvamCode")
-                val ttsReq = TtsRequest(
-                    text = responseText,
-                    target_language_code = resolvedSarvamCode
-                )
-                val ttsResp = SarvamApi.textToSpeech(request = ttsReq)
-                if (ttsResp.audios.isNotEmpty()) {
-                    Log.d("MainVM", "TTS audio received, playing...")
-                    audioHelper.playBase64Audio(ttsResp.audios[0]) {
-                        _state.value = _state.value.copy(assistantState = AssistantState.IDLE, audioAmplitude = 0f)
-                        scheduleListeningRestart()
-                    }
-                    return@launch
-                } else {
-                    Log.w("MainVM", "TTS returned empty audios")
-                }
-            } catch (e: retrofit2.HttpException) {
-                val errorBody = e.response()?.errorBody()?.string()
-                Log.e("MainVM", "Sarvam TTS HTTP ${e.code()}: $errorBody", e)
-            } catch (e: Exception) {
-                Log.e("MainVM", "Sarvam TTS failed: ${e.message}", e)
-            }
-
-            // Fallback to Android TTS
-            Log.d("MainVM", "Falling back to Android TTS")
-            fallbackTts(responseText, resolvedSarvamCode)
+            speakViaSarvam(responseText, resolvedSarvamCode)
         }
+    }
+
+    /** Reusable suspend TTS call — used by the normal pipeline and the symptom TTS observer. */
+    suspend fun speakViaSarvam(text: String, sarvamCode: String) {
+        _state.value = _state.value.copy(assistantState = AssistantState.SPEAKING)
+        try {
+            Log.d("MainVM", "Calling Sarvam TTS with lang=$sarvamCode")
+            val ttsReq = TtsRequest(text = text, target_language_code = sarvamCode)
+            val ttsResp = SarvamApi.textToSpeech(request = ttsReq)
+            if (ttsResp.audios.isNotEmpty()) {
+                Log.d("MainVM", "TTS audio received, playing...")
+                audioHelper.playBase64Audio(ttsResp.audios[0]) {
+                    _state.value = _state.value.copy(assistantState = AssistantState.IDLE, audioAmplitude = 0f)
+                    scheduleListeningRestart()
+                }
+                return
+            } else {
+                Log.w("MainVM", "TTS returned empty audios")
+            }
+        } catch (e: retrofit2.HttpException) {
+            val errorBody = e.response()?.errorBody()?.string()
+            Log.e("MainVM", "Sarvam TTS HTTP ${e.code()}: $errorBody", e)
+        } catch (e: Exception) {
+            Log.e("MainVM", "Sarvam TTS failed: ${e.message}", e)
+        }
+        // Fallback to Android TTS
+        Log.d("MainVM", "Falling back to Android TTS")
+        fallbackTts(text, sarvamCode)
     }
 
     /** Stop speaking and return to idle */
@@ -464,6 +576,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             append("If ALL 3 conditions are met, add EXACTLY ONE line at the very end:\n")
             append("[IMAGE: detailed photorealistic English description]\n")
             append("When in doubt, do NOT add [IMAGE:]. Voice is always enough.")
+            append(SymptomPrompts.HEALTH_TRIGGER_ADDON)
 
             if (liveScreenMode) {
                 append("\n\nYou are currently in LIVE SCREEN ASSIST mode.")

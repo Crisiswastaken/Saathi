@@ -3,6 +3,7 @@ package com.sohanreddy.sevak.ui.main
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
@@ -22,6 +23,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import com.sohanreddy.sevak.R
 import com.sohanreddy.sevak.data.PrefsManager
 import com.sohanreddy.sevak.data.getStatusText
@@ -52,6 +55,7 @@ import com.sohanreddy.sevak.ui.theme.SaathiColors
 @Composable
 fun MainScreen(
     prefs: PrefsManager,
+    navController: NavController,
     viewModel: MainViewModel = viewModel(),
     onSignOut: () -> Unit
 ) {
@@ -141,6 +145,25 @@ fun MainScreen(
         }
     }
 
+    // ── Location permission ──────────────────────────────────────────────
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) viewModel.fetchUserLocation()
+        // If denied, location stays null — map submission is silently skipped
+    }
+
+    // Request location permission once on first composition
+    LaunchedEffect(Unit) {
+        val alreadyGranted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!alreadyGranted) {
+            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        // If already granted, MainViewModel.init already called fetchUserLocation()
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // ── Background image ────────────────────────────────────────
         Image(
@@ -150,20 +173,29 @@ fun MainScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // ── Settings icon — top right ───────────────────────────────
-        IconButton(
-            onClick = { showSheet = true },
+        // ── Settings icon — top right ──────────────────────────────────────
+        Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .statusBarsPadding()
-                .padding(16.dp)
+                .padding(end = 8.dp, top = 4.dp)
         ) {
-            Icon(
-                Icons.Default.Settings,
-                contentDescription = "Settings",
-                tint = Color.White.copy(alpha = 0.75f),
-                modifier = Modifier.size(26.dp)
-            )
+            IconButton(onClick = { navController.navigate(com.sohanreddy.sevak.navigation.Routes.DISEASE_MAP) }) {
+                Icon(
+                    Icons.Default.Map,
+                    contentDescription = "Disease Map",
+                    tint = Color.White.copy(alpha = 0.75f),
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+            IconButton(onClick = { showSheet = true }) {
+                Icon(
+                    Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    tint = Color.White.copy(alpha = 0.75f),
+                    modifier = Modifier.size(26.dp)
+                )
+            }
         }
 
         // ── Waveform centred content ────────────────────────────────
