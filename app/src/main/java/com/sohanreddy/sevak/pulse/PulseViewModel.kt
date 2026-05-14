@@ -7,6 +7,7 @@ import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -124,7 +125,10 @@ class PulseViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Camera binding ───────────────────────────────────────────────────────
 
-    fun bindCamera(lifecycleOwner: LifecycleOwner) {
+    fun bindCamera(
+        lifecycleOwner: LifecycleOwner,
+        previewSurfaceProvider: Preview.SurfaceProvider? = null
+    ) {
         val context = getApplication<Application>()
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
@@ -147,12 +151,26 @@ class PulseViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                 val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                val preview = previewSurfaceProvider?.let { surfaceProvider ->
+                    Preview.Builder()
+                        .build()
+                        .also { it.setSurfaceProvider(surfaceProvider) }
+                }
 
-                val camera = provider.bindToLifecycle(
-                    lifecycleOwner,
-                    cameraSelector,
-                    imageAnalysis
-                )
+                val camera = if (preview != null) {
+                    provider.bindToLifecycle(
+                        lifecycleOwner,
+                        cameraSelector,
+                        preview,
+                        imageAnalysis
+                    )
+                } else {
+                    provider.bindToLifecycle(
+                        lifecycleOwner,
+                        cameraSelector,
+                        imageAnalysis
+                    )
+                }
 
                 // Turn on flash immediately
                 cameraControl = camera.cameraControl

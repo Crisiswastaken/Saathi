@@ -94,3 +94,16 @@ Before I implement, a few open questions so I don’t accidentally build the wro
 Once you answer these, I’ll implement the redesign and run the build successfully before handing it back.
 
 """
+
+
+"""
+UI REFINEMENET/ENHANCEMENT FOR THE PULSE SECTION
+1. Currently the Pulse section has been implemented with default UI and it needs to be updated to match the rest of the app's design language and to make it more visually appealing and user friendly.
+2. First Update the overall UI, ie background and styling to make it match the rest of the apps design system.
+3. Replace the existing Heart rate and Sp02 cards with the heart-rate-section-box and spo2-section-box images and turn them to cards, redirects remains same.
+4. Heart Rate detection page: Use the heart-rate-bg image for background then update it so that the heart rate is denoted on top of the heart, also add a small circle on top that shows live camera feed so that the user can see which camera to cover. (refer to attached screenshot for reference)
+5. Similarly for the SPO2 detection page use the spo2-bg image for background and make the same changes as for the heart rate page.
+
+ 
+
+"""

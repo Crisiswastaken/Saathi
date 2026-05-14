@@ -36,13 +36,12 @@ import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,6 +56,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -70,9 +70,13 @@ import java.util.Locale
 
 private val PageBlue = Color(0xFF10233F)
 private val BodyBlue = Color(0xFF566983)
+private val MutedBlue = Color(0xFF8190A6)
+private val CardWhite = Color(0xFFFBFDFF)
+private val StrokeLight = Color(0xFFE1E9F4)
 private val AccentPink = Color(0xFFF65987)
 private val AccentBlue = Color(0xFF5D8DFF)
 private val AccentGreen = Color(0xFF20B79B)
+private val Danger = Color(0xFFE85A6A)
 
 @Composable
 fun DocumentManagerScreen(
@@ -103,15 +107,22 @@ fun DocumentManagerScreen(
         contentPadding = contentPadding,
         onBack = onBack,
         action = {
-            Button(
-                onClick = { uploadLauncher.launch(arrayOf("application/pdf", "text/*", "image/*", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")) },
-                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(8.dp))
-                Text("Upload")
-            }
+            PrimaryActionButton(
+                label = "Upload",
+                color = AccentBlue,
+                icon = { Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                onClick = {
+                    uploadLauncher.launch(
+                        arrayOf(
+                            "application/pdf",
+                            "text/*",
+                            "image/*",
+                            "application/msword",
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        )
+                    )
+                }
+            )
         }
     ) {
         if (documents.isEmpty()) {
@@ -148,7 +159,8 @@ fun DocumentManagerScreen(
                     value = renameText,
                     onValueChange = { renameText = it },
                     singleLine = true,
-                    label = { Text("Document name") }
+                    label = { Text("Document name") },
+                    colors = workspaceTextFieldColors()
                 )
             },
             confirmButton = {
@@ -188,15 +200,12 @@ fun ReportManagerScreen(
         contentPadding = contentPadding,
         onBack = onBack,
         action = {
-            Button(
-                onClick = onCreateReport,
-                colors = ButtonDefaults.buttonColors(containerColor = AccentPink),
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(8.dp))
-                Text("New")
-            }
+            PrimaryActionButton(
+                label = "New",
+                color = AccentPink,
+                icon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                onClick = onCreateReport
+            )
         }
     ) {
         item {
@@ -216,7 +225,6 @@ fun ReportManagerScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportEditorScreen(
     reportId: String?,
@@ -249,7 +257,10 @@ fun ReportEditorScreen(
         contentPadding = contentPadding,
         onBack = onBack,
         action = {
-            Button(
+            PrimaryActionButton(
+                label = "Save",
+                color = AccentGreen,
+                icon = { Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp)) },
                 onClick = {
                     repository.upsertReport(
                         initial.copy(
@@ -269,14 +280,8 @@ fun ReportEditorScreen(
                     )
                     Toast.makeText(context, "Report saved locally", Toast.LENGTH_SHORT).show()
                     onBack()
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = AccentGreen),
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(8.dp))
-                Text("Save")
-            }
+                }
+            )
         }
     ) {
         item {
@@ -321,26 +326,73 @@ private fun WorkspacePage(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 12.dp, top = 10.dp, end = 20.dp, bottom = 8.dp),
+                .padding(start = 14.dp, top = 10.dp, end = 20.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = PageBlue)
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, color = PageBlue, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
-                Text(subtitle, color = BodyBlue, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White.copy(alpha = 0.88f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.92f))
+            ) {
+                IconButton(onClick = onBack, modifier = Modifier.size(46.dp)) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = PageBlue)
+                }
             }
             action()
         }
 
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 24.dp, bottom = 8.dp)
+        ) {
+            Text(
+                title,
+                color = PageBlue,
+                fontSize = 28.sp,
+                lineHeight = 31.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                subtitle,
+                color = BodyBlue,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content
         )
+    }
+}
+
+@Composable
+private fun PrimaryActionButton(
+    label: String,
+    color: Color,
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White),
+        shape = RoundedCornerShape(18.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 0.dp),
+        modifier = Modifier.heightIn(min = 46.dp)
+    ) {
+        icon()
+        Spacer(Modifier.size(8.dp))
+        Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 
@@ -351,25 +403,41 @@ private fun DocumentCard(
     onDelete: () -> Unit
 ) {
     WorkspaceCard {
-        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            IconBubble(color = AccentBlue) {
-                Icon(Icons.Default.Description, contentDescription = null, tint = Color.White)
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                IconBubble(color = AccentBlue) {
+                    Icon(Icons.Default.Description, contentDescription = null, tint = Color.White)
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(document.name, color = PageBlue, fontSize = 17.sp, lineHeight = 21.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text("${document.mimeType} - ${formatBytes(document.sizeBytes)}", color = BodyBlue, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("Added ${formatDate(document.createdAt)}", color = MutedBlue, fontSize = 12.sp, lineHeight = 17.sp)
+                    Text("Updated ${formatDate(document.updatedAt)}", color = MutedBlue, fontSize = 12.sp, lineHeight = 17.sp)
+                }
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(document.name, color = PageBlue, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("${document.mimeType} • ${formatBytes(document.sizeBytes)}", color = BodyBlue, fontSize = 13.sp)
-                Text("Added ${formatDate(document.createdAt)} • Updated ${formatDate(document.updatedAt)}", color = BodyBlue.copy(alpha = 0.75f), fontSize = 12.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onRename, shape = RoundedCornerShape(14.dp)) {
-                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.size(6.dp))
-                        Text("Rename")
-                    }
-                    TextButton(onClick = onDelete) {
-                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFFE85A6A))
-                        Spacer(Modifier.size(6.dp))
-                        Text("Delete", color = Color(0xFFE85A6A))
-                    }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = onRename,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = PageBlue),
+                    border = BorderStroke(1.dp, Color(0xFFB9C5D8)),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 46.dp)
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Rename", fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+                TextButton(
+                    onClick = onDelete,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 46.dp)
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp), tint = Danger)
+                    Spacer(Modifier.size(6.dp))
+                    Text("Delete", color = Danger, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
         }
@@ -383,31 +451,42 @@ private fun ReportCard(
     onDelete: () -> Unit
 ) {
     WorkspaceCard {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 IconBubble(color = AccentPink) {
                     Icon(Icons.Default.Description, contentDescription = null, tint = Color.White)
                 }
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(report.name, color = PageBlue, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                    Text(report.templateName, color = AccentPink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    Text("Created ${formatDate(report.createdAt)} • Updated ${formatDate(report.updatedAt)}", color = BodyBlue, fontSize = 12.sp)
-                }
-                Surface(shape = RoundedCornerShape(12.dp), color = AccentGreen.copy(alpha = 0.12f)) {
-                    Text(report.status, color = AccentGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(report.name, color = PageBlue, fontSize = 18.sp, lineHeight = 22.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(report.templateName, color = AccentPink, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold)
+                    Text("Created ${formatDate(report.createdAt)}", color = MutedBlue, fontSize = 12.sp, lineHeight = 17.sp)
+                    Text("Updated ${formatDate(report.updatedAt)}", color = MutedBlue, fontSize = 12.sp, lineHeight = 17.sp)
+                    StatusChip(report.status)
                 }
             }
             Text(report.patientSummary.ifBlank { "No summary filled yet." }, color = BodyBlue, fontSize = 14.sp, lineHeight = 20.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = onEdit, shape = RoundedCornerShape(14.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = onEdit,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F495F), contentColor = Color.White),
+                    shape = RoundedCornerShape(15.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 46.dp)
+                ) {
                     Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.size(6.dp))
-                    Text("View / Edit")
+                    Text("Edit", fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
-                TextButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFFE85A6A))
+                TextButton(
+                    onClick = onDelete,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 46.dp)
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp), tint = Danger)
                     Spacer(Modifier.size(6.dp))
-                    Text("Delete", color = Color(0xFFE85A6A))
+                    Text("Delete", color = Danger, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
         }
@@ -415,22 +494,48 @@ private fun ReportCard(
 }
 
 @Composable
+private fun StatusChip(status: String) {
+    Surface(shape = RoundedCornerShape(12.dp), color = AccentGreen.copy(alpha = 0.13f)) {
+        Text(
+            status,
+            color = AccentGreen,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+        )
+    }
+}
+
+@Composable
 private fun ReportTemplatePreview() {
     WorkspaceCard {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Report template", color = PageBlue, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
-            Text("General health summary", color = AccentBlue, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text("Report template", color = PageBlue, fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.ExtraBold)
+            Text("General health summary", color = AccentBlue, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold)
             Text(
                 "Ready for future AI-filled fields: patient summary, symptoms, medications, allergies, vitals, medical history, lifestyle notes, doctor notes, recommendations, and follow-up plan.",
                 color = BodyBlue,
                 fontSize = 14.sp,
                 lineHeight = 20.sp
             )
-            HorizontalDivider(color = Color(0xFFE7EEF9))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HorizontalDivider(color = StrokeLight)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("Metadata", "Clinical notes", "Care plan").forEach { label ->
-                    Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFF0F5FF)) {
-                        Text(label, color = BodyBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFF0F5FF)
+                    ) {
+                        Text(
+                            label,
+                            color = BodyBlue,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                        )
                     }
                 }
             }
@@ -448,15 +553,15 @@ private fun EmptyState(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 22.dp),
+                .padding(vertical = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             IconBubble(color = AccentBlue) {
                 Icon(icon, contentDescription = null, tint = Color.White)
             }
-            Text(title, color = PageBlue, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
-            Text(body, color = BodyBlue, fontSize = 14.sp, lineHeight = 20.sp)
+            Text(title, color = PageBlue, fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center)
+            Text(body, color = BodyBlue, fontSize = 14.sp, lineHeight = 20.sp, textAlign = TextAlign.Center)
         }
     }
 }
@@ -465,13 +570,13 @@ private fun EmptyState(
 private fun WorkspaceCard(content: @Composable ColumnScope.() -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        color = Color.White.copy(alpha = 0.84f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.76f)),
-        tonalElevation = 2.dp,
-        shadowElevation = 12.dp
+        shape = RoundedCornerShape(24.dp),
+        color = CardWhite,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.9f)),
+        tonalElevation = 1.dp,
+        shadowElevation = 6.dp
     ) {
-        Column(modifier = Modifier.padding(18.dp), content = content)
+        Column(modifier = Modifier.padding(16.dp), content = content)
     }
 }
 
@@ -496,8 +601,15 @@ private fun FormField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label) },
+        label = { Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) },
         singleLine = singleLine,
+        textStyle = androidx.compose.ui.text.TextStyle(
+            color = PageBlue,
+            fontSize = 15.sp,
+            lineHeight = 21.sp,
+            fontWeight = FontWeight.SemiBold
+        ),
+        colors = workspaceTextFieldColors(),
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 12.dp)
@@ -509,14 +621,27 @@ private fun FormField(
 @Composable
 private fun MetadataStrip(report: HealthReport) {
     WorkspaceCard {
-        Text("Metadata", color = PageBlue, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+        Text("Metadata", color = PageBlue, fontSize = 18.sp, lineHeight = 22.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(8.dp))
-        Text("Template: ${report.templateName}", color = BodyBlue, fontSize = 14.sp)
-        Text("Created: ${formatDate(report.createdAt)}", color = BodyBlue, fontSize = 14.sp)
-        Text("Last updated: ${formatDate(report.updatedAt)}", color = BodyBlue, fontSize = 14.sp)
+        Text("Template: ${report.templateName}", color = BodyBlue, fontSize = 14.sp, lineHeight = 20.sp)
+        Text("Created: ${formatDate(report.createdAt)}", color = BodyBlue, fontSize = 14.sp, lineHeight = 20.sp)
+        Text("Last updated: ${formatDate(report.updatedAt)}", color = BodyBlue, fontSize = 14.sp, lineHeight = 20.sp)
     }
     Spacer(Modifier.height(12.dp))
 }
+
+@Composable
+private fun workspaceTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = PageBlue,
+    unfocusedTextColor = PageBlue,
+    focusedLabelColor = AccentBlue,
+    unfocusedLabelColor = MutedBlue,
+    focusedBorderColor = AccentBlue,
+    unfocusedBorderColor = Color(0xFFB4BDCA),
+    cursorColor = AccentBlue,
+    focusedContainerColor = Color.White.copy(alpha = 0.72f),
+    unfocusedContainerColor = Color.White.copy(alpha = 0.72f)
+)
 
 private fun formatDate(raw: String): String {
     return runCatching {

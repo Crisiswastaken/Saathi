@@ -2,230 +2,205 @@ package com.sohanreddy.sevak.ui.pulse
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.view.ViewGroup
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.*
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Canvas
+import androidx.camera.view.PreviewView
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sohanreddy.sevak.R
 import com.sohanreddy.sevak.pulse.MeasurementMode
 import com.sohanreddy.sevak.pulse.MeasurementState
 import com.sohanreddy.sevak.pulse.PulseViewModel
 import com.sohanreddy.sevak.pulse.VitalResult
 
-// ── Color palette ────────────────────────────────────────────────────────────
-private val HeartRed = Color(0xFFE53935)
-private val HeartRedDark = Color(0xFF8B0000)
-private val SpO2Blue = Color(0xFF2196F3)
-private val SpO2BlueDark = Color(0xFF0D47A1)
-private val SurfaceDark = Color(0xFF0F1629)
-private val CardDark = Color(0xFF1A2340)
-private val CardBorder = Color(0xFF2A3456)
-
-// ── Pulse Landing Screen ─────────────────────────────────────────────────────
+private val HeartRed = Color(0xFFF65987)
+private val HeartRedStrong = Color(0xFFFF4A67)
+private val SpO2Blue = Color(0xFF2E86FF)
+private val AppInk = Color(0xFF10233F)
+private val AppMuted = Color(0xFF566983)
+private val AppSoftBlue = Color(0xFFF7FAFF)
+private val AppBlush = Color(0xFFFDF7FB)
 
 @Composable
 fun PulseLandingScreen(
     contentPadding: PaddingValues,
     onModeSelected: (MeasurementMode) -> Unit
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(SurfaceDark, Color(0xFF070B18))
+                    colors = listOf(
+                        Color(0xFFFDFEFF),
+                        AppSoftBlue,
+                        AppBlush
+                    )
                 )
             )
             .padding(contentPadding)
+            .statusBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(start = 24.dp, top = 18.dp, end = 24.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 24.dp)
-                .padding(top = 48.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Title
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text = "Pulse",
-                fontSize = 34.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = AppInk,
+                fontSize = 36.sp,
+                fontWeight = FontWeight.ExtraBold
             )
-            Spacer(Modifier.height(4.dp))
             Text(
                 text = "Camera-based vital signs monitoring",
-                fontSize = 14.sp,
-                color = Color.White.copy(alpha = 0.5f)
+                color = AppMuted,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold
             )
+        }
 
-            Spacer(Modifier.height(48.dp))
+        Spacer(Modifier.height(2.dp))
 
-            // Heart Rate Card
-            VitalCard(
-                title = "Heart Rate",
-                subtitle = "Measure your pulse using the camera",
-                icon = Icons.Filled.Favorite,
-                unit = "BPM",
-                primaryColor = HeartRed,
-                gradientColors = listOf(HeartRedDark, HeartRed),
-                onClick = { onModeSelected(MeasurementMode.HEART_RATE) }
-            )
+        PulseImageCard(
+            imageRes = R.drawable.heart_rate_section_box,
+            contentDescription = "Heart Rate",
+            aspectRatio = 660f / 417f,
+            onClick = { onModeSelected(MeasurementMode.HEART_RATE) }
+        )
 
-            Spacer(Modifier.height(20.dp))
+        PulseImageCard(
+            imageRes = R.drawable.spo2_section_box,
+            contentDescription = "SpO2",
+            aspectRatio = 1428f / 916f,
+            onClick = { onModeSelected(MeasurementMode.SPO2) }
+        )
 
-            // SpO2 Card
-            VitalCard(
-                title = "SpO₂",
-                subtitle = "Estimate blood oxygen saturation",
-                icon = Icons.Filled.Air,
-                unit = "%",
-                primaryColor = SpO2Blue,
-                gradientColors = listOf(SpO2BlueDark, SpO2Blue),
-                onClick = { onModeSelected(MeasurementMode.SPO2) }
-            )
-
-            Spacer(Modifier.height(32.dp))
-
-            // Info card
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = CardDark.copy(alpha = 0.6f)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(28.dp),
+            color = Color.White.copy(alpha = 0.82f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.76f)),
+            tonalElevation = 2.dp,
+            shadowElevation = 12.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
-                ) {
-                    Text(
-                        text = "How it works",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "Place your fingertip on the rear camera lens. The flash will illuminate your finger to detect blood volume changes (PPG). Keep still for 30 seconds.",
-                        fontSize = 13.sp,
-                        color = Color.White.copy(alpha = 0.45f),
-                        lineHeight = 20.sp
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = "⚠️ This is not a medical device. Consult a doctor for clinical diagnosis.",
-                        fontSize = 12.sp,
-                        color = Color(0xFFFBC02D).copy(alpha = 0.7f),
-                        lineHeight = 18.sp
-                    )
-                }
+                Text(
+                    text = "How it works",
+                    color = AppInk,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Place your fingertip over the rear camera and flash. Keep still while Saathi reads subtle color changes from the camera feed.",
+                    color = AppMuted,
+                    fontSize = 14.sp,
+                    lineHeight = 21.sp
+                )
+                Text(
+                    text = "Wellness estimate only. For clinical concerns, consult a healthcare professional.",
+                    color = Color(0xFFEC6476),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 18.sp
+                )
             }
         }
     }
 }
 
 @Composable
-private fun VitalCard(
-    title: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    unit: String,
-    primaryColor: Color,
-    gradientColors: List<Color>,
+private fun PulseImageCard(
+    imageRes: Int,
+    contentDescription: String,
+    aspectRatio: Float,
     onClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(32.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        color = Color.Transparent
+        shape = RoundedCornerShape(32.dp),
+        color = Color.White.copy(alpha = 0.78f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.74f)),
+        tonalElevation = 2.dp,
+        shadowElevation = 14.dp
     ) {
-        Box(
+        Image(
+            painter = painterResource(imageRes),
+            contentDescription = contentDescription,
+            contentScale = ContentScale.FillWidth,
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.horizontalGradient(gradientColors),
-                    RoundedCornerShape(20.dp)
-                )
-                .padding(24.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // Icon
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .background(Color.White.copy(alpha = 0.15f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = title,
-                        tint = Color.White,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-
-                Spacer(Modifier.width(16.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = title,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = subtitle,
-                        fontSize = 13.sp,
-                        color = Color.White.copy(alpha = 0.7f)
-                    )
-                }
-
-                Icon(
-                    imageVector = Icons.Filled.ChevronRight,
-                    contentDescription = "Start",
-                    tint = Color.White.copy(alpha = 0.6f),
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
+                .aspectRatio(aspectRatio)
+        )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MeasurementScreen(
     mode: MeasurementMode,
@@ -238,45 +213,42 @@ fun MeasurementScreen(
     )
 ) {
     val context = LocalContext.current
-    @Suppress("DEPRECATION")
     val lifecycleOwner = LocalLifecycleOwner.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val primaryColor = if (mode == MeasurementMode.HEART_RATE) HeartRedStrong else SpO2Blue
+    val previewView = remember(context) {
+        PreviewView(context).apply {
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+        }
+    }
 
-    val primaryColor = if (mode == MeasurementMode.HEART_RATE) HeartRed else SpO2Blue
-    val modeName = if (mode == MeasurementMode.HEART_RATE) "Heart Rate" else "SpO₂"
-
-    // Camera permission
     var hasCameraPerm by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
-                    PackageManager.PERMISSION_GRANTED
+                PackageManager.PERMISSION_GRANTED
         )
     }
+    var cameraIsBound by remember { mutableStateOf(false) }
 
     val cameraPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasCameraPerm = granted }
 
-    // Track if we've already bound the camera for this session
-    var cameraIsBound by remember { mutableStateOf(false) }
-
-    // Request camera permission on first launch
     LaunchedEffect(Unit) {
         if (!hasCameraPerm) {
             cameraPermLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
-    // Once we have permission, start measurement and bind camera ONCE
-    LaunchedEffect(hasCameraPerm) {
+    LaunchedEffect(hasCameraPerm, previewView) {
         if (hasCameraPerm && !cameraIsBound) {
             viewModel.startMeasurement(mode)
-            viewModel.bindCamera(lifecycleOwner)
+            viewModel.bindCamera(lifecycleOwner, previewView.surfaceProvider)
             cameraIsBound = true
         }
     }
 
-    // Clean up camera on exit
     DisposableEffect(Unit) {
         onDispose {
             viewModel.releaseCamera()
@@ -284,426 +256,360 @@ fun MeasurementScreen(
         }
     }
 
-    // Helper to retry: release + rebind
     val retryMeasurement = {
         viewModel.releaseCamera()
         cameraIsBound = false
         viewModel.startMeasurement(mode)
-        viewModel.bindCamera(lifecycleOwner)
+        viewModel.bindCamera(lifecycleOwner, previewView.surfaceProvider)
         cameraIsBound = true
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(SurfaceDark, Color(0xFF070B18))
-                )
-            )
-            .padding(contentPadding)
+    MeasurementBackgroundFrame(
+        mode = mode,
+        contentPadding = contentPadding
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Top bar
-            Row(
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val state = uiState.measurementState
+            val metricTop = maxHeight * if (mode == MeasurementMode.HEART_RATE) 0.37f else 0.34f
+
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 34.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                IconButton(onClick = {
-                    viewModel.stopMeasurement()
-                    onBack()
-                }) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = Color.White
-                    )
-                }
-                Spacer(Modifier.weight(1f))
+                CircularCameraPreview(previewView = previewView)
+                Spacer(Modifier.height(14.dp))
                 Text(
-                    text = modeName,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    text = statusTitle(state, uiState.fingerDetected, hasCameraPerm),
+                    color = AppInk,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Center
                 )
-                Spacer(Modifier.weight(1f))
-                Spacer(Modifier.width(48.dp))
+                Text(
+                    text = statusSubtitle(state, mode, hasCameraPerm),
+                    color = AppMuted.copy(alpha = 0.52f),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
+                )
+                MeasurementProgress(state = state, primaryColor = primaryColor)
             }
 
-            Spacer(Modifier.height(32.dp))
+            IconButton(
+                onClick = {
+                    viewModel.stopMeasurement()
+                    onBack()
+                },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 44.dp, end = 22.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = Color(0xFF344159),
+                    modifier = Modifier.size(34.dp)
+                )
+            }
 
-            // Content based on state
-            when (val state = uiState.measurementState) {
-                is MeasurementState.WaitingForFinger -> {
-                    WaitingForFingerUI(primaryColor)
-                }
-                is MeasurementState.Measuring -> {
-                    MeasuringUI(
-                        state = state,
-                        primaryColor = primaryColor,
-                        waveform = uiState.liveWaveform,
-                        fingerDetected = uiState.fingerDetected,
-                        instantBpm = uiState.instantBpm,
-                        instantSpO2 = uiState.instantSpO2,
-                        mode = mode
-                    )
+            MetricOverlay(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = metricTop),
+                mode = mode,
+                state = state,
+                instantBpm = uiState.instantBpm,
+                instantSpO2 = uiState.instantSpO2
+            )
+
+            when (state) {
+                is MeasurementState.Idle -> {
+                    if (!hasCameraPerm) {
+                        PermissionSheet(
+                            primaryColor = primaryColor,
+                            onGrantPermission = { cameraPermLauncher.launch(Manifest.permission.CAMERA) },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(horizontal = 20.dp, vertical = 20.dp)
+                        )
+                    }
                 }
                 is MeasurementState.Complete -> {
-                    ResultUI(
+                    ResultSheet(
                         result = state.result,
                         primaryColor = primaryColor,
                         onRetry = retryMeasurement,
-                        onDone = onBack
+                        onDone = onBack,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(horizontal = 20.dp, vertical = 20.dp)
                     )
                 }
                 is MeasurementState.Error -> {
-                    ErrorUI(
+                    ErrorSheet(
                         message = state.message,
                         primaryColor = primaryColor,
                         onRetry = retryMeasurement,
-                        onBack = onBack
+                        onBack = onBack,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(horizontal = 20.dp, vertical = 20.dp)
                     )
                 }
-                is MeasurementState.Idle -> {
-                    if (!hasCameraPerm) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Spacer(Modifier.height(80.dp))
-                            Text(
-                                text = "Camera permission required",
-                                fontSize = 18.sp,
-                                color = Color.White.copy(alpha = 0.6f)
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            Button(
-                                onClick = { cameraPermLauncher.launch(Manifest.permission.CAMERA) },
-                                colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
-                            ) {
-                                Text("Grant Permission")
-                            }
-                        }
-                    }
-                }
+                else -> Unit
             }
         }
     }
 }
 
-// ── Waiting for Finger ───────────────────────────────────────────────────────
-
 @Composable
-private fun WaitingForFingerUI(primaryColor: Color) {
-    val pulseAnim = rememberInfiniteTransition(label = "pulse")
-    val scale by pulseAnim.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseScale"
-    )
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
+private fun MeasurementBackgroundFrame(
+    mode: MeasurementMode,
+    contentPadding: PaddingValues,
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(contentPadding)
+            .background(Color.White)
     ) {
-        Spacer(Modifier.height(80.dp))
-
-        // Pulsing finger icon
+        Image(
+            painter = painterResource(
+                if (mode == MeasurementMode.HEART_RATE) {
+                    R.drawable.heart_rate_bg
+                } else {
+                    R.drawable.spo2_bg
+                }
+            ),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
         Box(
             modifier = Modifier
-                .size((120 * scale).dp)
-                .background(primaryColor.copy(alpha = 0.15f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .size((80 * scale).dp)
-                    .background(primaryColor.copy(alpha = 0.3f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Fingerprint,
-                    contentDescription = "Place finger",
-                    tint = primaryColor,
-                    modifier = Modifier.size(48.dp)
+                .fillMaxWidth()
+                .height(260.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.96f),
+                            Color.White.copy(alpha = 0.72f),
+                            Color.White.copy(alpha = 0.0f)
+                        )
+                    )
                 )
-            }
-        }
-
-        Spacer(Modifier.height(32.dp))
-
-        Text(
-            text = "Place your finger",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
         )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Cover the rear camera and flash with\nyour fingertip. Apply gentle pressure.",
-            fontSize = 14.sp,
-            color = Color.White.copy(alpha = 0.5f),
-            textAlign = TextAlign.Center,
-            lineHeight = 22.sp
-        )
+        content()
     }
 }
 
-// ── Measuring ────────────────────────────────────────────────────────────────
-
 @Composable
-private fun MeasuringUI(
-    state: MeasurementState.Measuring,
-    primaryColor: Color,
-    waveform: List<Float>,
-    fingerDetected: Boolean,
-    instantBpm: Int = 0,
-    instantSpO2: Int = 0,
-    mode: MeasurementMode = MeasurementMode.HEART_RATE
-) {
-    // Determine which live value to show based on mode
-    val isSpO2Mode = mode == MeasurementMode.SPO2
-    val hasLiveValue = if (isSpO2Mode) instantSpO2 > 0 else instantBpm > 0
-    val liveValueText = if (isSpO2Mode) "$instantSpO2" else "$instantBpm"
-    val liveUnitText = if (isSpO2Mode) "%" else "BPM"
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
+private fun CircularCameraPreview(previewView: PreviewView) {
+    Box(
+        modifier = Modifier
+            .size(72.dp)
+            .shadow(12.dp, CircleShape, clip = false)
+            .clip(CircleShape)
+            .background(Color(0xFFEAF1FA))
+            .border(3.dp, Color.White, CircleShape),
+        contentAlignment = Alignment.Center
     ) {
-        // Progress ring
-        Box(
-            modifier = Modifier.size(160.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator(
-                progress = { state.progress },
-                modifier = Modifier.size(160.dp),
-                color = primaryColor,
-                strokeWidth = 6.dp,
-                trackColor = primaryColor.copy(alpha = 0.15f),
-                strokeCap = StrokeCap.Round
-            )
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (hasLiveValue) {
-                    Text(
-                        text = liveValueText,
-                        fontSize = 40.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = primaryColor
-                    )
-                    Text(
-                        text = liveUnitText,
-                        fontSize = 13.sp,
-                        color = primaryColor.copy(alpha = 0.6f)
-                    )
-                } else {
-                    Text(
-                        text = "${state.elapsedSec}s",
-                        fontSize = 36.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "/ 30s",
-                        fontSize = 14.sp,
-                        color = Color.White.copy(alpha = 0.4f)
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Text(
-            text = if (isSpO2Mode) "Measuring SpO\u2082... ${state.elapsedSec}s / 30s"
-                   else "Measuring... ${state.elapsedSec}s / 30s",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = primaryColor
+        AndroidView(
+            factory = {
+                (previewView.parent as? ViewGroup)?.removeView(previewView)
+                previewView
+            },
+            modifier = Modifier.fillMaxSize()
         )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Keep your finger still on the camera",
-            fontSize = 13.sp,
-            color = Color.White.copy(alpha = 0.4f)
-        )
-
-        Spacer(Modifier.height(32.dp))
-
-        // Live waveform
-        if (waveform.size > 10) {
-            Text(
-                text = "PPG Waveform",
-                fontSize = 12.sp,
-                color = Color.White.copy(alpha = 0.3f),
-                modifier = Modifier.align(Alignment.Start)
-            )
-            Spacer(Modifier.height(8.dp))
-
-            WaveformCanvas(
-                waveform = waveform,
-                color = primaryColor,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp)
-                    .background(CardDark.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                    .padding(8.dp)
-            )
-        }
     }
 }
 
 @Composable
-private fun WaveformCanvas(
-    waveform: List<Float>,
-    color: Color,
+private fun MeasurementProgress(
+    state: MeasurementState,
+    primaryColor: Color
+) {
+    if (state is MeasurementState.Measuring) {
+        Spacer(Modifier.height(12.dp))
+        LinearProgressIndicator(
+            progress = { state.progress },
+            modifier = Modifier
+                .width(142.dp)
+                .height(6.dp)
+                .clip(RoundedCornerShape(100.dp)),
+            color = primaryColor,
+            trackColor = primaryColor.copy(alpha = 0.16f)
+        )
+    }
+}
+
+@Composable
+private fun MetricOverlay(
+    mode: MeasurementMode,
+    state: MeasurementState,
+    instantBpm: Int,
+    instantSpO2: Int,
     modifier: Modifier = Modifier
 ) {
-    Canvas(modifier = modifier) {
-        if (waveform.size < 2) return@Canvas
-
-        val width = size.width
-        val height = size.height
-        val midY = height / 2
-
-        // Normalize waveform to fit canvas
-        val maxAbs = waveform.maxOfOrNull { kotlin.math.abs(it) }?.coerceAtLeast(0.001f) ?: 1f
-        val amplitude = height * 0.4f
-
-        val path = Path()
-        val stepX = width / (waveform.size - 1).coerceAtLeast(1)
-
-        waveform.forEachIndexed { i, value ->
-            val x = i * stepX
-            val y = midY - (value / maxAbs) * amplitude
-            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    val value = when (state) {
+        is MeasurementState.Complete -> {
+            if (mode == MeasurementMode.HEART_RATE) {
+                state.result.heartRate
+            } else {
+                state.result.spo2
+            }
         }
+        is MeasurementState.Measuring -> {
+            if (mode == MeasurementMode.HEART_RATE) {
+                instantBpm.takeIf { it > 0 }
+            } else {
+                instantSpO2.takeIf { it > 0 }
+            }
+        }
+        else -> null
+    }
+    val unit = if (mode == MeasurementMode.HEART_RATE) "bpm" else "%"
 
-        drawPath(
-            path = path,
-            color = color,
-            style = Stroke(width = 2.5f, cap = StrokeCap.Round)
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value?.toString() ?: "--",
+            color = Color.White,
+            fontSize = 48.sp,
+            fontWeight = FontWeight.ExtraBold,
+            lineHeight = 50.sp
+        )
+        Text(
+            text = unit,
+            color = Color.White,
+            fontSize = if (mode == MeasurementMode.HEART_RATE) 28.sp else 34.sp,
+            fontWeight = FontWeight.Bold,
+            lineHeight = 34.sp
         )
     }
 }
 
-// ── Result ────────────────────────────────────────────────────────────────────
+private fun statusTitle(
+    state: MeasurementState,
+    fingerDetected: Boolean,
+    hasCameraPermission: Boolean
+): String {
+    if (!hasCameraPermission) return "Camera access needed"
+    return when (state) {
+        is MeasurementState.WaitingForFinger -> {
+            if (fingerDetected) "Finger detected" else "No finger detected"
+        }
+        is MeasurementState.Measuring -> "Measuring"
+        is MeasurementState.Complete -> "Reading complete"
+        is MeasurementState.Error -> "Measurement failed"
+        is MeasurementState.Idle -> "Preparing camera"
+    }
+}
+
+private fun statusSubtitle(
+    state: MeasurementState,
+    mode: MeasurementMode,
+    hasCameraPermission: Boolean
+): String {
+    if (!hasCameraPermission) return "Allow camera access to continue"
+    return when (state) {
+        is MeasurementState.WaitingForFinger -> "Press your finger on camera"
+        is MeasurementState.Measuring -> {
+            val label = if (mode == MeasurementMode.HEART_RATE) "Heart rate" else "SpO2"
+            "$label reading ${state.elapsedSec}s / 30s"
+        }
+        is MeasurementState.Complete -> "You can retake or return to Pulse"
+        is MeasurementState.Error -> "Adjust your finger and try again"
+        is MeasurementState.Idle -> "Setting up live preview"
+    }
+}
 
 @Composable
-private fun ResultUI(
+private fun PermissionSheet(
+    primaryColor: Color,
+    onGrantPermission: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    GlassSheet(modifier = modifier) {
+        Text(
+            text = "Camera permission required",
+            color = AppInk,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "Saathi needs camera access to read your fingertip and show the live placement preview.",
+            color = AppMuted,
+            fontSize = 13.sp,
+            lineHeight = 19.sp
+        )
+        Button(
+            onClick = onGrantPermission,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+        ) {
+            Text("Grant permission")
+        }
+    }
+}
+
+@Composable
+private fun ResultSheet(
     result: VitalResult,
     primaryColor: Color,
     onRetry: () -> Unit,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(Modifier.height(24.dp))
-
-        // Main metric
-        if (result.mode == MeasurementMode.HEART_RATE && result.heartRate != null) {
-            MetricDisplay(
-                value = "${result.heartRate}",
-                unit = "BPM",
-                label = "Heart Rate",
-                color = primaryColor
-            )
-        } else if (result.mode == MeasurementMode.SPO2 && result.spo2 != null) {
-            MetricDisplay(
-                value = "${result.spo2}",
-                unit = "%",
-                label = "Blood Oxygen",
-                color = primaryColor
-            )
-        } else {
-            Text(
-                text = "Could not compute result",
-                fontSize = 18.sp,
-                color = Color.White.copy(alpha = 0.6f)
-            )
-        }
-
-        Spacer(Modifier.height(28.dp))
-
-        // Secondary metrics grid
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = CardDark.copy(alpha = 0.7f)
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                // Heart rate (always shown if available)
-                if (result.heartRate != null && result.mode == MeasurementMode.SPO2) {
-                    MetricRow("Heart Rate", "${result.heartRate} BPM", primaryColor)
-                    Spacer(Modifier.height(12.dp))
-                }
-
-                // SpO2 status
-                if (result.spo2 != null) {
-                    val spo2Status = when {
-                        result.spo2 >= 95 -> "Normal" to Color(0xFF4CAF50)
-                        result.spo2 >= 92 -> "Mild Concern" to Color(0xFFFFC107)
-                        else -> "Alert" to Color(0xFFE53935)
-                    }
-                    MetricRow("SpO₂ Status", spo2Status.first, spo2Status.second)
-                    Spacer(Modifier.height(12.dp))
-                }
-
-                // HRV
-                if (result.hrvRmssd != null) {
-                    MetricRow("HRV (RMSSD)", "${"%.1f".format(result.hrvRmssd)} ms", Color.White.copy(alpha = 0.7f))
-                    Spacer(Modifier.height(12.dp))
-                }
-
-                // Stress
-                if (result.stressIndex != null) {
-                    val stressLabel = when {
-                        result.stressIndex <= 25 -> "Relaxed" to Color(0xFF4CAF50)
-                        result.stressIndex <= 50 -> "Normal" to Color(0xFF8BC34A)
-                        result.stressIndex <= 70 -> "Moderate" to Color(0xFFFFC107)
-                        else -> "High" to Color(0xFFE53935)
-                    }
-                    MetricRow("Stress Level", stressLabel.first, stressLabel.second)
-                    Spacer(Modifier.height(12.dp))
-                }
-
-                // Signal quality
-                val sqiColor = when {
-                    result.signalQuality >= 70 -> Color(0xFF4CAF50)
-                    result.signalQuality >= 50 -> Color(0xFFFFC107)
-                    else -> Color(0xFFE53935)
-                }
-                MetricRow("Signal Quality", "${result.signalQuality}/100", sqiColor)
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Disclaimer
+    GlassSheet(modifier = modifier) {
         Text(
-            text = "⚠️ Not a medical device. For wellness purposes only.\nConsult a healthcare professional for clinical diagnosis.",
-            fontSize = 11.sp,
-            color = Color.White.copy(alpha = 0.3f),
-            textAlign = TextAlign.Center,
-            lineHeight = 16.sp
+            text = "Result details",
+            color = AppInk,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold
         )
-
-        Spacer(Modifier.height(24.dp))
-
-        // Action buttons
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (result.mode == MeasurementMode.SPO2 && result.heartRate != null) {
+                MetricRow("Heart Rate", "${result.heartRate} bpm", primaryColor)
+            }
+            if (result.spo2 != null) {
+                val status = when {
+                    result.spo2 >= 95 -> "Normal"
+                    result.spo2 >= 92 -> "Mild concern"
+                    else -> "Alert"
+                }
+                MetricRow("SpO2 Status", status, primaryColor)
+            }
+            if (result.hrvRmssd != null) {
+                MetricRow("HRV", "${"%.1f".format(result.hrvRmssd)} ms", AppMuted)
+            }
+            if (result.stressIndex != null) {
+                val stressLabel = when {
+                    result.stressIndex <= 25 -> "Relaxed"
+                    result.stressIndex <= 50 -> "Normal"
+                    result.stressIndex <= 70 -> "Moderate"
+                    else -> "High"
+                }
+                MetricRow("Stress", stressLabel, AppMuted)
+            }
+            MetricRow("Signal Quality", "${result.signalQuality}/100", AppMuted)
+        }
+        Text(
+            text = "Wellness estimate only. Not for clinical diagnosis.",
+            color = Color(0xFFEC6476),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -711,59 +617,96 @@ private fun ResultUI(
             OutlinedButton(
                 onClick = onRetry,
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = primaryColor
-                )
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = primaryColor)
             ) {
-                Text("Retake", fontSize = 15.sp)
+                Text("Retake")
             }
-
             Button(
                 onClick = onDone,
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = primaryColor
-                )
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
             ) {
-                Text("Done", fontSize = 15.sp)
+                Text("Done")
             }
         }
     }
 }
 
 @Composable
-private fun MetricDisplay(
-    value: String,
-    unit: String,
-    label: String,
-    color: Color
+private fun ErrorSheet(
+    message: String,
+    primaryColor: Color,
+    onRetry: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    GlassSheet(modifier = modifier) {
         Row(
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.Center
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = value,
-                fontSize = 72.sp,
-                fontWeight = FontWeight.Bold,
-                color = color
+            Icon(
+                imageVector = Icons.Default.ErrorOutline,
+                contentDescription = null,
+                tint = primaryColor,
+                modifier = Modifier.size(24.dp)
             )
-            Spacer(Modifier.width(8.dp))
             Text(
-                text = unit,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Medium,
-                color = color.copy(alpha = 0.7f),
-                modifier = Modifier.padding(bottom = 12.dp)
+                text = "Try once more",
+                color = AppInk,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
             )
         }
         Text(
-            text = label,
-            fontSize = 16.sp,
-            color = Color.White.copy(alpha = 0.5f)
+            text = message,
+            color = AppMuted,
+            fontSize = 13.sp,
+            lineHeight = 19.sp
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(
+                onClick = onBack,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = AppMuted)
+            ) {
+                Text("Back")
+            }
+            Button(
+                onClick = onRetry,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+            ) {
+                Text("Try again")
+            }
+        }
+    }
+}
+
+@Composable
+private fun GlassSheet(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = Color.White.copy(alpha = 0.92f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.82f)),
+        tonalElevation = 2.dp,
+        shadowElevation = 16.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = content
         )
     }
 }
@@ -778,7 +721,7 @@ private fun MetricRow(label: String, value: String, valueColor: Color) {
         Text(
             text = label,
             fontSize = 14.sp,
-            color = Color.White.copy(alpha = 0.5f)
+            color = AppMuted
         )
         Text(
             text = value,
@@ -786,72 +729,5 @@ private fun MetricRow(label: String, value: String, valueColor: Color) {
             fontWeight = FontWeight.SemiBold,
             color = valueColor
         )
-    }
-}
-
-// ── Error ─────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun ErrorUI(
-    message: String,
-    primaryColor: Color,
-    onRetry: () -> Unit,
-    onBack: () -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(Modifier.height(80.dp))
-
-        Icon(
-            imageVector = Icons.Filled.ErrorOutline,
-            contentDescription = "Error",
-            tint = primaryColor,
-            modifier = Modifier.size(64.dp)
-        )
-
-        Spacer(Modifier.height(20.dp))
-
-        Text(
-            text = "Measurement Failed",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
-
-        Spacer(Modifier.height(12.dp))
-
-        Text(
-            text = message,
-            fontSize = 14.sp,
-            color = Color.White.copy(alpha = 0.5f),
-            textAlign = TextAlign.Center,
-            lineHeight = 22.sp
-        )
-
-        Spacer(Modifier.height(32.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            OutlinedButton(
-                onClick = onBack,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-            ) {
-                Text("Go Back")
-            }
-            Button(
-                onClick = onRetry,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
-            ) {
-                Text("Try Again")
-            }
-        }
     }
 }
