@@ -15,6 +15,8 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.sohanreddy.sevak.data.LocalWorkspaceRepository
+import com.sohanreddy.sevak.data.VitalScan
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,6 +67,8 @@ data class PulseUiState(
 // ── ViewModel ────────────────────────────────────────────────────────────────
 
 class PulseViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val localWorkspaceRepository = LocalWorkspaceRepository(application)
 
     private val _uiState = MutableStateFlow(PulseUiState())
     val uiState: StateFlow<PulseUiState> = _uiState.asStateFlow()
@@ -499,6 +503,22 @@ class PulseViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 Log.d(TAG, "Result: HR=${result.heartRate}, SpO2=${result.spo2}, SQI=$sqi, Stress=$stress")
+
+                localWorkspaceRepository.saveVitalScan(
+                    VitalScan(
+                        id = java.util.UUID.randomUUID().toString(),
+                        mode = mode.name,
+                        heartRate = result.heartRate,
+                        spo2 = result.spo2,
+                        hrvRmssd = result.hrvRmssd,
+                        hrvSdnn = result.hrvSdnn,
+                        stressIndex = result.stressIndex,
+                        signalQuality = result.signalQuality,
+                        durationSec = result.durationSec,
+                        measuredAt = LocalWorkspaceRepository.nowIso(),
+                        timestampMs = System.currentTimeMillis()
+                    )
+                )
 
                 _uiState.update {
                     it.copy(measurementState = MeasurementState.Complete(result))

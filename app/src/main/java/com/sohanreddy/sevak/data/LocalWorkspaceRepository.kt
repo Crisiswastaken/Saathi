@@ -3,10 +3,15 @@ package com.sohanreddy.sevak.data
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.text.PDFTextStripper
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.nio.charset.Charset
 import java.time.Instant
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
@@ -16,8 +21,24 @@ data class SaathiDocument(
     val mimeType: String,
     val sizeBytes: Long,
     val localPath: String,
+    val aiEnabled: Boolean,
+    val aiIndexPath: String,
     val createdAt: String,
     val updatedAt: String
+)
+
+data class VitalScan(
+    val id: String,
+    val mode: String,
+    val heartRate: Int?,
+    val spo2: Int?,
+    val hrvRmssd: Double?,
+    val hrvSdnn: Double?,
+    val stressIndex: Int?,
+    val signalQuality: Int,
+    val durationSec: Int,
+    val measuredAt: String,
+    val timestampMs: Long
 )
 
 data class HealthReport(
@@ -42,6 +63,11 @@ data class HealthReport(
 class LocalWorkspaceRepository(private val context: Context) {
     private val prefs = context.getSharedPreferences("saathi_local_workspace", Context.MODE_PRIVATE)
     private val documentsDir = File(context.filesDir, "saathi_documents").apply { mkdirs() }
+    private val documentsIndexDir = File(context.filesDir, "saathi_documents_index").apply { mkdirs() }
+
+    init {
+        runCatching { PDFBoxResourceLoader.init(context) }
+    }
 
     fun getDocuments(): List<SaathiDocument> {
         return prefs.getString(KEY_DOCUMENTS, null)
@@ -71,11 +97,21 @@ class LocalWorkspaceRepository(private val context: Context) {
             mimeType = mimeType,
             sizeBytes = target.length(),
             localPath = target.absolutePath,
+            aiEnabled = true,
+            aiIndexPath = buildDocumentIndex(id, mimeType, target),
             createdAt = now,
             updatedAt = now
         )
         saveDocuments(getDocuments() + document)
         return document
+    }
+
+    fun setDocumentAiEnabled(id: String, enabled: Boolean) {
+        saveDocuments(
+            getDocuments().map { document ->
+                if (document.id == id) document.copy(aiEnabled = enabled, updatedAt = nowIso()) else document
+            }
+        )
     }
 
     fun renameDocument(id: String, name: String) {
@@ -88,11 +124,89 @@ class LocalWorkspaceRepository(private val context: Context) {
 
     fun deleteDocument(id: String) {
         val current = getDocuments()
-        current.firstOrNull { it.id == id }?.localPath?.let { path ->
-            runCatching { File(path).delete() }
+        current.firstOrNull { it.id == id }?.let { document ->
+            runCatching { File(document.localPath).delete() }
+            if (document.aiIndexPath.isNotBlank()) {
+                runCatching { File(document.aiIndexPath).delete() }
+            }
         }
         saveDocuments(current.filterNot { it.id == id })
     }
+
+    fun getVitalScans(): List<VitalScan> {
+        return prefs.getString(KEY_VITAL_SCANS, null)
+            ?.let(::decodeVitalScans)
+            ?: emptyList()
+    }
+
+    fun saveVitalScan(scan: VitalScan) {
+        val deduped = getVitalScans()
+            .filterNot { it.id == scan.id }
+            .plus(scan)
+            .sortedByDescending { it.timestampMs }
+            .take(MAX_STORED_VITAL_SCANS)
+        saveVitalScans(deduped)
+    }
+
+    fun getLatestVitalScan(): VitalScan? = getVitalScans().maxByOrNull { it.timestampMs }
+
+    fun formatLatestVitalsForReport(): String {
+        val latest = getLatestVitalScan() ?: return "No heart rate or SpO2 scans captured yet."
+        val segments = mutableListOf<String>()
+        latest.heartRate?.let { segments += "Heart rate: $it bpm" }
+        latest.spo2?.let { segments += "SpO2: $it%" }
+        latest.hrvRmssd?.let { segments += "HRV RMSSD: ${"%.1f".format(it)} ms" }
+        latest.hrvSdnn?.let { segments += "HRV SDNN: ${"%.1f".format(it)} ms" }
+        latest.stressIndex?.let { segments += "Stress index: $it" }
+        segments += "Signal quality: ${latest.signalQuality}/100"
+        segments += "Duration: ${latest.durationSec}s"
+        segments += "Measured at: ${formatIsoDate(latest.measuredAt)}"
+        return segments.joinToString(" | ")
+    }
+
+    fun buildEnabledDocumentContext(
+        maxDocuments: Int = 4,
+        maxCharsPerDocument: Int = 1600,
+        totalMaxChars: Int = 5000
+    ): String {
+        val enabled = getDocuments().filter { it.aiEnabled }.take(maxDocuments)
+        if (enabled.isEmpty()) return ""
+
+        val sections = mutableListOf<String>()
+        var consumed = 0
+        enabled.forEach { document ->
+            val text = getDocumentExtractForAi(document, maxCharsPerDocument)
+            if (text.isBlank()) return@forEach
+            val section = "Document: ${document.name}\n$text"
+            if (consumed + section.length > totalMaxChars) return@forEach
+            sections += section
+            consumed += section.length
+        }
+        return sections.joinToString("\n\n")
+    }
+
+    fun buildMedicalHistoryFromUploadedDocuments(
+        maxDocuments: Int = 5,
+        maxCharsPerDocument: Int = 500
+    ): String {
+        val uploaded = getDocuments().take(maxDocuments)
+        if (uploaded.isEmpty()) return "No uploaded medical documents available yet."
+
+        return uploaded.joinToString("\n\n") { document ->
+            val excerpt = getDocumentExtractForAi(document, maxCharsPerDocument)
+            val body = if (excerpt.isBlank()) {
+                "No text could be extracted from this file yet."
+            } else {
+                excerpt
+            }
+            "${document.name}: $body"
+        }
+    }
+
+    fun buildMedicalHistoryFromEnabledDocuments(
+        maxDocuments: Int = 5,
+        maxCharsPerDocument: Int = 500
+    ): String = buildMedicalHistoryFromUploadedDocuments(maxDocuments, maxCharsPerDocument)
 
     fun getReports(): List<HealthReport> {
         val stored = prefs.getString(KEY_REPORTS, null)
@@ -134,8 +248,8 @@ class LocalWorkspaceRepository(private val context: Context) {
             symptoms = "",
             medications = "",
             allergies = "",
-            vitals = "",
-            medicalHistory = "",
+            vitals = formatLatestVitalsForReport(),
+            medicalHistory = buildMedicalHistoryFromUploadedDocuments(),
             lifestyleNotes = "",
             doctorNotes = "",
             recommendations = "",
@@ -149,6 +263,10 @@ class LocalWorkspaceRepository(private val context: Context) {
 
     private fun saveReports(reports: List<HealthReport>) {
         prefs.edit().putString(KEY_REPORTS, encodeReports(reports).toString()).apply()
+    }
+
+    private fun saveVitalScans(scans: List<VitalScan>) {
+        prefs.edit().putString(KEY_VITAL_SCANS, encodeVitalScans(scans).toString()).apply()
     }
 
     private fun demoReports(): List<HealthReport> {
@@ -202,6 +320,8 @@ class LocalWorkspaceRepository(private val context: Context) {
                     .put("mimeType", document.mimeType)
                     .put("sizeBytes", document.sizeBytes)
                     .put("localPath", document.localPath)
+                    .put("aiEnabled", document.aiEnabled)
+                    .put("aiIndexPath", document.aiIndexPath)
                     .put("createdAt", document.createdAt)
                     .put("updatedAt", document.updatedAt)
             )
@@ -218,8 +338,49 @@ class LocalWorkspaceRepository(private val context: Context) {
                 mimeType = item.optString("mimeType", "application/octet-stream"),
                 sizeBytes = item.optLong("sizeBytes"),
                 localPath = item.optString("localPath"),
+                aiEnabled = item.optBoolean("aiEnabled", true),
+                aiIndexPath = item.optString("aiIndexPath", ""),
                 createdAt = item.optString("createdAt"),
                 updatedAt = item.optString("updatedAt")
+            )
+        }
+    }
+
+    private fun encodeVitalScans(scans: List<VitalScan>) = JSONArray().apply {
+        scans.forEach { scan ->
+            put(
+                JSONObject()
+                    .put("id", scan.id)
+                    .put("mode", scan.mode)
+                    .put("heartRate", scan.heartRate)
+                    .put("spo2", scan.spo2)
+                    .put("hrvRmssd", scan.hrvRmssd)
+                    .put("hrvSdnn", scan.hrvSdnn)
+                    .put("stressIndex", scan.stressIndex)
+                    .put("signalQuality", scan.signalQuality)
+                    .put("durationSec", scan.durationSec)
+                    .put("measuredAt", scan.measuredAt)
+                    .put("timestampMs", scan.timestampMs)
+            )
+        }
+    }
+
+    private fun decodeVitalScans(raw: String): List<VitalScan> {
+        val array = JSONArray(raw)
+        return List(array.length()) { index ->
+            val item = array.getJSONObject(index)
+            VitalScan(
+                id = item.optString("id", UUID.randomUUID().toString()),
+                mode = item.optString("mode"),
+                heartRate = item.optNullableInt("heartRate"),
+                spo2 = item.optNullableInt("spo2"),
+                hrvRmssd = item.optNullableDouble("hrvRmssd"),
+                hrvSdnn = item.optNullableDouble("hrvSdnn"),
+                stressIndex = item.optNullableInt("stressIndex"),
+                signalQuality = item.optInt("signalQuality", 0),
+                durationSec = item.optInt("durationSec", 0),
+                measuredAt = item.optString("measuredAt", nowIso()),
+                timestampMs = item.optLong("timestampMs", Instant.now().toEpochMilli())
             )
         }
     }
@@ -273,9 +434,88 @@ class LocalWorkspaceRepository(private val context: Context) {
         }
     }
 
+    private fun getDocumentExtractForAi(document: SaathiDocument, maxChars: Int): String {
+        val raw = ensureIndexAndRead(document)
+        return raw.replace(Regex("\\s+"), " ").trim().take(maxChars)
+    }
+
+    private fun ensureIndexAndRead(document: SaathiDocument): String {
+        if (document.aiIndexPath.isNotBlank()) {
+            val cached = runCatching { File(document.aiIndexPath).readText() }.getOrNull()
+            if (!cached.isNullOrBlank()) return cached
+        }
+
+        val source = File(document.localPath)
+        if (!source.exists()) return ""
+
+        val extracted = extractDocumentText(document.mimeType, source)
+        if (extracted.isBlank()) return ""
+
+        val newIndexPath = writeIndexFile(document.id, extracted)
+        if (newIndexPath.isNotBlank()) {
+            saveDocuments(
+                getDocuments().map {
+                    if (it.id == document.id) it.copy(aiIndexPath = newIndexPath, updatedAt = nowIso()) else it
+                }
+            )
+        }
+        return extracted
+    }
+
+    private fun buildDocumentIndex(id: String, mimeType: String, source: File): String {
+        val extracted = extractDocumentText(mimeType, source)
+        if (extracted.isBlank()) return ""
+        return writeIndexFile(id, extracted)
+    }
+
+    private fun writeIndexFile(id: String, text: String): String {
+        return runCatching {
+            val file = File(documentsIndexDir, "$id.txt")
+            file.writeText(text.take(MAX_DOC_INDEX_CHARS))
+            file.absolutePath
+        }.getOrDefault("")
+    }
+
+    private fun extractDocumentText(mimeType: String, source: File): String {
+        return when {
+            mimeType.startsWith("text/") || source.extension.lowercase() in SUPPORTED_TEXT_EXTENSIONS -> readTextSafely(source)
+            mimeType == "application/pdf" || source.extension.equals("pdf", ignoreCase = true) -> extractPdfText(source)
+            else -> ""
+        }
+    }
+
+    private fun extractPdfText(source: File): String {
+        return runCatching {
+            PDDocument.load(source).use { document ->
+                PDFTextStripper().getText(document)
+            }
+        }.getOrDefault("")
+    }
+
+    private fun readTextSafely(source: File): String {
+        return runCatching { source.readText(Charset.forName("UTF-8")) }
+            .recoverCatching { source.readText() }
+            .getOrDefault("")
+    }
+
+    private fun formatIsoDate(raw: String): String {
+        return runCatching {
+            DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm")
+                .withZone(ZoneId.systemDefault())
+                .format(Instant.parse(raw))
+        }.getOrDefault(raw)
+    }
+
+    private fun JSONObject.optNullableInt(key: String): Int? = if (isNull(key)) null else optInt(key)
+    private fun JSONObject.optNullableDouble(key: String): Double? = if (isNull(key)) null else optDouble(key)
+
     companion object {
         private const val KEY_DOCUMENTS = "documents"
         private const val KEY_REPORTS = "reports"
+        private const val KEY_VITAL_SCANS = "vital_scans"
+        private const val MAX_DOC_INDEX_CHARS = 32_000
+        private const val MAX_STORED_VITAL_SCANS = 60
+        private val SUPPORTED_TEXT_EXTENSIONS = setOf("txt", "md", "csv", "json", "xml", "log")
 
         fun nowIso(): String = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
     }

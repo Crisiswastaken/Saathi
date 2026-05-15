@@ -28,16 +28,41 @@ data class GroqRequestMessage(
     val content: Any
 )
 
+data class GroqToolFunction(
+    val name: String,
+    val description: String,
+    val parameters: Any
+)
+
+data class GroqTool(
+    val type: String = "function",
+    val function: GroqToolFunction
+)
+
+data class GroqToolCallFunction(
+    val name: String,
+    val arguments: String
+)
+
+data class GroqToolCall(
+    val id: String? = null,
+    val type: String? = null,
+    val function: GroqToolCallFunction? = null
+)
+
 data class GroqRequest(
     val model: String = "llama-3.3-70b-versatile",
     val messages: List<GroqRequestMessage>,
     val temperature: Double = 0.4,
-    val max_tokens: Int = 300
+    val max_tokens: Int = 300,
+    val tools: List<GroqTool>? = null,
+    val tool_choice: Any? = null
 )
 
 data class GroqResponseMessage(
     val role: String? = null,
-    val content: String? = null
+    val content: String? = null,
+    val tool_calls: List<GroqToolCall>? = null
 )
 
 data class GroqChoice(val message: GroqResponseMessage)

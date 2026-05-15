@@ -4,11 +4,15 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
+import com.sohanreddy.sevak.data.LocalWorkspaceRepository
 import com.sohanreddy.sevak.map.DiseaseReport
 import com.sohanreddy.sevak.map.FirestoreMapRepository
 import com.sohanreddy.sevak.network.GroqApiService
 import com.sohanreddy.sevak.network.GroqRequest
 import com.sohanreddy.sevak.network.GroqRequestMessage
+import com.sohanreddy.sevak.network.GroqResponseMessage
+import com.sohanreddy.sevak.network.GroqTool
+import com.sohanreddy.sevak.network.GroqToolFunction
 import com.sohanreddy.sevak.network.groqTextMessage
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -17,6 +21,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -36,8 +41,19 @@ sealed class SymptomState {
 class SymptomViewModel(
     private val groqApiService: GroqApiService,
     private val firestoreRepo: FirestoreMapRepository,
-    private val groqApiKey: String
+    private val groqApiKey: String,
+    private val localWorkspaceRepository: LocalWorkspaceRepository
 ) : ViewModel() {
+
+    data class ReportExtraction(
+        val patientSummary: String,
+        val symptoms: String,
+        val medications: String,
+        val allergies: String,
+        val lifestyleNotes: String,
+        val recommendations: String,
+        val medicalHistory: String
+    )
 
     private val _state = MutableStateFlow<SymptomState>(SymptomState.Idle)
     val state: StateFlow<SymptomState> = _state.asStateFlow()
@@ -184,6 +200,7 @@ class SymptomViewModel(
             }
 
             emitSpeech("$announcementText $storageText")
+            generateAndStoreHealthReport(updatedSession, prediction)
             finishSession()
 
         } catch (e: Exception) {
@@ -211,6 +228,7 @@ class SymptomViewModel(
             "I could not update the community health map right now."
         }
         emitSpeech("$announcementText $storageText")
+        generateAndStoreHealthReport(session, prediction)
         finishSession()
     }
 
@@ -285,17 +303,42 @@ class SymptomViewModel(
         val msgs = mutableListOf(
             groqTextMessage("system", SymptomPrompts.followUpSystemPrompt(session.language))
         )
+        val documentContext = enabledDocumentContextForConversation()
+        if (documentContext.isNotBlank()) {
+            msgs.add(
+                groqTextMessage(
+                    "system",
+                    "User-selected uploaded medical document context:\n$documentContext"
+                )
+            )
+        }
         session.turns.forEach { msgs.add(groqTextMessage(it.role, it.content)) }
         return msgs
     }
 
     private suspend fun detectDirectDiseaseReport(session: SymptomSession): DiseasePrediction? {
         val latestUserText = session.turns.lastOrNull { it.role == "user" }?.content ?: return null
-        val raw = callGroq(listOf(
-            groqTextMessage("system", SymptomPrompts.directDiseaseReportPrompt(session.language)),
-            groqTextMessage("user", latestUserText)
-        ))
+        val messages = mutableListOf(
+            groqTextMessage("system", SymptomPrompts.directDiseaseReportPrompt(session.language))
+        )
+        val documentContext = enabledDocumentContextForConversation()
+        if (documentContext.isNotBlank()) {
+            messages += groqTextMessage(
+                "system",
+                "User-selected uploaded medical document context:\n$documentContext"
+            )
+        }
+        messages += groqTextMessage("user", latestUserText)
+        val raw = callGroq(messages)
         return parseDirectDiseaseReport(raw)
+    }
+
+    private fun enabledDocumentContextForConversation(): String {
+        return localWorkspaceRepository.buildEnabledDocumentContext(
+            maxDocuments = 3,
+            maxCharsPerDocument = 900,
+            totalMaxChars = 2600
+        )
     }
 
     private suspend fun emitSpeech(text: String) {
@@ -311,8 +354,181 @@ class SymptomViewModel(
             temperature = 0.3,
             max_tokens = 400
         )
+        return callGroqMessage(request)?.content?.trim() ?: ""
+    }
+
+    private suspend fun callGroqMessage(request: GroqRequest): GroqResponseMessage? {
         return groqApiService.chat("Bearer $groqApiKey", request)
-            .choices.firstOrNull()?.message?.content?.trim() ?: ""
+            .choices.firstOrNull()
+            ?.message
+    }
+
+    private suspend fun generateAndStoreHealthReport(session: SymptomSession, prediction: DiseasePrediction) {
+        if (!hasEnoughConversationForReport(session)) {
+            Log.d(TAG, "Skipping report generation; not enough conversation data")
+            return
+        }
+
+        runCatching {
+            val extraction = requestStructuredReportExtraction(session, prediction)
+            val docHistory = localWorkspaceRepository.buildMedicalHistoryFromUploadedDocuments()
+            val mergedMedicalHistory = listOf(
+                extraction?.medicalHistory.orEmpty(),
+                docHistory
+            ).filter { it.isNotBlank() }.joinToString("\n\n")
+
+            val fallbackSymptoms = session.collectedSymptoms.ifEmpty { prediction.symptoms }
+            val report = localWorkspaceRepository.newBlankReport().copy(
+                name = "AI health report - ${prediction.disease}",
+                status = "AI Filled",
+                patientSummary = extraction?.patientSummary.orEmpty(),
+                symptoms = extraction?.symptoms
+                    ?.takeIf { it.isNotBlank() }
+                    ?: fallbackSymptoms.joinToString(", "),
+                medications = extraction?.medications.orEmpty(),
+                allergies = extraction?.allergies.orEmpty(),
+                vitals = localWorkspaceRepository.formatLatestVitalsForReport(),
+                medicalHistory = mergedMedicalHistory,
+                lifestyleNotes = extraction?.lifestyleNotes.orEmpty(),
+                doctorNotes = "",
+                recommendations = extraction?.recommendations.orEmpty(),
+                followUpPlan = ""
+            )
+            localWorkspaceRepository.upsertReport(report)
+            Log.d(TAG, "Local AI health report saved: ${report.id}")
+        }.onFailure {
+            Log.e(TAG, "Failed to auto-generate health report: ${it.message}", it)
+        }
+    }
+
+    private fun hasEnoughConversationForReport(session: SymptomSession): Boolean {
+        val userTurns = session.turns.count { it.role == "user" }
+        return userTurns >= 2 && session.collectedSymptoms.size >= 2
+    }
+
+    private suspend fun requestStructuredReportExtraction(
+        session: SymptomSession,
+        prediction: DiseasePrediction
+    ): ReportExtraction? {
+        val transcript = session.turns.joinToString("\n") { turn ->
+            "${turn.role}: ${turn.content}"
+        }
+        val docContext = localWorkspaceRepository.buildEnabledDocumentContext(
+            maxDocuments = 4,
+            maxCharsPerDocument = 1200,
+            totalMaxChars = 3600
+        )
+        val latestVitals = localWorkspaceRepository.formatLatestVitalsForReport()
+
+        val request = GroqRequest(
+            model = "llama-3.3-70b-versatile",
+            temperature = 0.1,
+            max_tokens = 600,
+            messages = listOf(
+                groqTextMessage(
+                    "system",
+                    "You are a structured medical scribe. You MUST call the fill_health_report tool exactly once with best-effort fields. Use empty strings when unknown and never invent facts."
+                ),
+                groqTextMessage(
+                    "user",
+                    """
+                    Conversation transcript:
+                    $transcript
+
+                    Predicted condition: ${prediction.disease}
+                    Predicted symptoms: ${prediction.symptoms.joinToString(", ")}
+                    Latest vitals summary: $latestVitals
+
+                    Enabled uploaded medical documents (text extract):
+                    ${if (docContext.isBlank()) "None" else docContext}
+                    """.trimIndent()
+                )
+            ),
+            tools = listOf(reportFillTool()),
+            tool_choice = mapOf(
+                "type" to "function",
+                "function" to mapOf("name" to REPORT_FILL_TOOL_NAME)
+            )
+        )
+
+        val response = callGroqMessage(request) ?: return null
+        val toolCall = response.tool_calls
+            ?.firstOrNull { it.function?.name == REPORT_FILL_TOOL_NAME }
+            ?.function
+            ?.arguments
+
+        val rawPayload = toolCall ?: response.content.orEmpty()
+        if (rawPayload.isBlank()) return null
+        return parseReportExtraction(rawPayload)
+    }
+
+    private fun reportFillTool(): GroqTool {
+        val schema = mapOf(
+            "type" to "object",
+            "properties" to mapOf(
+                "patientSummary" to mapOf("type" to "string"),
+                "symptoms" to mapOf(
+                    "description" to "Either a short string or list of symptoms discussed",
+                    "oneOf" to listOf(
+                        mapOf("type" to "string"),
+                        mapOf("type" to "array", "items" to mapOf("type" to "string"))
+                    )
+                ),
+                "medications" to mapOf("type" to "string"),
+                "allergies" to mapOf("type" to "string"),
+                "lifestyleNotes" to mapOf("type" to "string"),
+                "recommendations" to mapOf("type" to "string"),
+                "medicalHistory" to mapOf("type" to "string")
+            ),
+            "required" to listOf(
+                "patientSummary",
+                "symptoms",
+                "medications",
+                "allergies",
+                "lifestyleNotes",
+                "recommendations",
+                "medicalHistory"
+            ),
+            "additionalProperties" to false
+        )
+
+        return GroqTool(
+            function = GroqToolFunction(
+                name = REPORT_FILL_TOOL_NAME,
+                description = "Fill structured local health report fields from conversation and document context.",
+                parameters = schema
+            )
+        )
+    }
+
+    private fun parseReportExtraction(raw: String): ReportExtraction? {
+        return runCatching {
+            val obj = JSONObject(stripMarkdownJson(raw))
+            ReportExtraction(
+                patientSummary = obj.optString("patientSummary").trim(),
+                symptoms = parseSymptomsField(obj).trim(),
+                medications = obj.optString("medications").trim(),
+                allergies = obj.optString("allergies").trim(),
+                lifestyleNotes = obj.optString("lifestyleNotes").trim(),
+                recommendations = obj.optString("recommendations").trim(),
+                medicalHistory = obj.optString("medicalHistory").trim()
+            )
+        }.getOrElse {
+            Log.e(TAG, "parseReportExtraction failed: ${it.message} | raw=$raw")
+            null
+        }
+    }
+
+    private fun parseSymptomsField(obj: JSONObject): String {
+        if (!obj.has("symptoms") || obj.isNull("symptoms")) return ""
+        val value = obj.get("symptoms")
+        return when (value) {
+            is JSONArray -> List(value.length()) { idx -> value.optString(idx) }
+                .filter { it.isNotBlank() }
+                .joinToString(", ")
+            is String -> value
+            else -> value.toString()
+        }
     }
 
     // ── JSON parsing ──────────────────────────────────────────────────────────
@@ -396,5 +612,8 @@ class SymptomViewModel(
         return yesTokens.any { lower.contains(it) }
     }
 
-    companion object { private const val TAG = "SymptomVM" }
+    companion object {
+        private const val TAG = "SymptomVM"
+        private const val REPORT_FILL_TOOL_NAME = "fill_health_report"
+    }
 }

@@ -18,6 +18,7 @@ import com.google.android.gms.location.Priority
 import com.google.firebase.auth.FirebaseAuth
 import com.sohanreddy.sevak.Constants
 import com.sohanreddy.sevak.audio.AudioHelper
+import com.sohanreddy.sevak.data.LocalWorkspaceRepository
 import com.sohanreddy.sevak.data.PrefsManager
 import com.sohanreddy.sevak.data.getLanguageByCode
 import com.sohanreddy.sevak.data.getLanguageBySarvamCode
@@ -63,11 +64,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(MainScreenState())
     val state = _state.asStateFlow()
 
+    private val localWorkspaceRepository = LocalWorkspaceRepository(application)
+
     // ── Symptom sub-ViewModel ────────────────────────────────────────────
     val symptomViewModel = SymptomViewModel(
         groqApiService = GroqApi.service,
         firestoreRepo = FirestoreMapRepository(),
-        groqApiKey = Constants.GROQ_API_KEY
+        groqApiKey = Constants.GROQ_API_KEY,
+        localWorkspaceRepository = localWorkspaceRepository
     )
     val isSymptomModeActive: Boolean
         get() = symptomViewModel.state.value !is SymptomState.Idle
@@ -483,6 +487,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             // Call Groq LLM with RAG context
             val langName = resolvedLang.englishName
+            val documentContext = localWorkspaceRepository.buildEnabledDocumentContext()
             val screenshotDataUrl = if (shouldAttachScreenSnapshot(transcript)) {
                 ScreenShareSessionManager.latestScreenshotDataUrl()
             } else {
@@ -495,7 +500,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             Log.d("MainVM", "Calling Groq with transcript: $transcript, lang: $langName")
-            val rawResponse = callGroq(transcript, langName, ragContext, screenshotDataUrl)
+            val rawResponse = callGroq(transcript, langName, ragContext, documentContext, screenshotDataUrl)
             Log.d("MainVM", "Groq raw response: $rawResponse")
 
             // ── Health-mode detection ────────────────────────────────────
@@ -597,6 +602,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         transcript: String,
         langName: String,
         ragContext: String = "",
+        documentContext: String = "",
         screenshotDataUrl: String? = null
     ): String {
         val liveScreenMode = ScreenShareSessionManager.isActive.value
@@ -651,6 +657,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (ragContext.isNotBlank()) {
                 append("\n\nPrevious conversation context (use this to remember what the user told you):\n")
                 append(ragContext)
+            }
+
+            if (documentContext.isNotBlank()) {
+                append("\n\nUploaded health documents selected by the user for AI reference:\n")
+                append(documentContext)
+                append("\nUse this only as supporting context. If user turns off a document, it will not appear here.")
             }
         }
 

@@ -43,6 +43,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -137,6 +139,10 @@ fun DocumentManagerScreen(
             items(documents, key = { it.id }) { document ->
                 DocumentCard(
                     document = document,
+                    onToggleAi = { enabled ->
+                        repository.setDocumentAiEnabled(document.id, enabled)
+                        documents = repository.getDocuments()
+                    },
                     onRename = {
                         renameTarget = document
                         renameText = document.name
@@ -399,6 +405,7 @@ private fun PrimaryActionButton(
 @Composable
 private fun DocumentCard(
     document: SaathiDocument,
+    onToggleAi: (Boolean) -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -413,6 +420,45 @@ private fun DocumentCard(
                     Text("${document.mimeType} - ${formatBytes(document.sizeBytes)}", color = BodyBlue, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text("Added ${formatDate(document.createdAt)}", color = MutedBlue, fontSize = 12.sp, lineHeight = 17.sp)
                     Text("Updated ${formatDate(document.updatedAt)}", color = MutedBlue, fontSize = 12.sp, lineHeight = 17.sp)
+                }
+            }
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0xFFF2F6FF),
+                border = BorderStroke(1.dp, StrokeLight)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Use in AI conversations",
+                            color = PageBlue,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (document.aiEnabled) "AI can reference this file" else "AI will ignore this file",
+                            color = BodyBlue,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                    Switch(
+                        checked = document.aiEnabled,
+                        onCheckedChange = onToggleAi,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = AccentBlue,
+                            uncheckedThumbColor = Color.White,
+                            uncheckedTrackColor = Color(0xFFBCC6D7)
+                        )
+                    )
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {

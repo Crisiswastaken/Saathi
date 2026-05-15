@@ -131,6 +131,9 @@ dependencies {
     // ONNX Runtime for on-device embeddings
     implementation(libs.onnxruntime.android)
 
+    // Local PDF text extraction for document-aware conversations
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+
     // CameraX for PPG vital signs measurement
     val cameraxVersion = "1.4.1"
     implementation("androidx.camera:camera-core:$cameraxVersion")
