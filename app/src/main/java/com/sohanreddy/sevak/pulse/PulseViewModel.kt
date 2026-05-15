@@ -78,7 +78,7 @@ class PulseViewModel(application: Application) : AndroidViewModel(application) {
     private var cameraControl: CameraControl? = null
     private val cameraExecutor = Executors.newSingleThreadExecutor()
 
-    // Signal buffers — all three channels for SpO2 (red + blue) and HR (red)
+    // Signal buffers — all three channels for SpO2 (red + green) and HR (red)
     private val redValues = mutableListOf<Double>()
     private val greenValues = mutableListOf<Double>()
     private val blueValues = mutableListOf<Double>()
@@ -266,7 +266,7 @@ class PulseViewModel(application: Application) : AndroidViewModel(application) {
                         val hr = computeHeartRateFromRedValues()
                         if (hr != null) liveBpm = hr
                         // Live SpO2 in SpO2 mode
-                        if (_uiState.value.currentMode == MeasurementMode.SPO2 && blueValues.size > 150) {
+                        if (_uiState.value.currentMode == MeasurementMode.SPO2 && greenValues.size > 150) {
                             val sp = computeSpO2FromChannels()
                             if (sp != null) liveSpO2 = sp
                         }
@@ -457,8 +457,8 @@ class PulseViewModel(application: Application) : AndroidViewModel(application) {
                 val hr = computeHeartRateFromRedValues()
                 Log.d(TAG, "Final HR: $hr BPM (from ${redValues.size} samples)")
 
-                // SpO2 estimation using RED and BLUE channels (Ratio-of-Ratios)
-                val spo2 = if (mode == MeasurementMode.SPO2 && redValues.size > 90 && blueValues.size > 90) {
+                // SpO2 estimation using RED and GREEN channels (Ratio-of-Ratios)
+                val spo2 = if (mode == MeasurementMode.SPO2 && redValues.size > 90 && greenValues.size > 90) {
                     computeSpO2FromChannels()?.coerceIn(85, 100)
                 } else null
 
@@ -535,14 +535,17 @@ class PulseViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * SpO2 using Windowed Ratio-of-Ratios method.
      *
+     * Uses RED and GREEN channels (not blue — blue is almost fully absorbed
+     * by finger tissue and has no meaningful pulsatile component).
+     *
      * Uses sliding 5-second windows to compute per-window RoR values,
      * then takes the median for robustness. This avoids the problem of
      * whole-session StdDev being dominated by drift instead of pulsatile AC.
      *
      * Formula per window:
      *   AC_red = StdDev(red_window), DC_red = Mean(red_window)
-     *   AC_blue = StdDev(blue_window), DC_blue = Mean(blue_window)
-     *   R_window = (AC_red / DC_red) / (AC_blue / DC_blue)
+     *   AC_green = StdDev(green_window), DC_green = Mean(green_window)
+     *   R_window = (AC_red / DC_red) / (AC_green / DC_green)
      *
      * Final SpO2 = 110 - 25 * median(R)
      *
@@ -552,7 +555,7 @@ class PulseViewModel(application: Application) : AndroidViewModel(application) {
      * matching the expected physiological range.
      */
     private fun computeSpO2FromChannels(): Int? {
-        if (redValues.size < 90 || blueValues.size < 90) return null
+        if (redValues.size < 90 || greenValues.size < 90) return null
 
         // Compute actual sample rate
         val totalTimeMs = if (timestamps.size >= 2) timestamps.last() - timestamps.first() else return null
@@ -563,39 +566,40 @@ class PulseViewModel(application: Application) : AndroidViewModel(application) {
         val windowSamples = (sampleRate * 5.0).toInt().coerceAtLeast(30)
         val stepSamples = windowSamples / 2
         val redArr = redValues.toDoubleArray()
-        val blueArr = blueValues.toDoubleArray()
+        val greenArr = greenValues.toDoubleArray()
 
         val windowRatios = mutableListOf<Double>()
 
         var start = 0
         while (start + windowSamples <= redArr.size) {
             val redWindow = redArr.sliceArray(start until start + windowSamples)
-            val blueWindow = blueArr.sliceArray(start until start + windowSamples)
+            val greenWindow = greenArr.sliceArray(start until start + windowSamples)
 
             val meanRed = redWindow.average()
-            val meanBlue = blueWindow.average()
+            val meanGreen = greenWindow.average()
 
             // Skip windows with very low signal (finger not fully covering)
-            if (meanRed < 5.0 || meanBlue < 0.5) {
+            if (meanRed < 5.0 || meanGreen < 0.5) {
                 start += stepSamples
                 continue
             }
 
             val stdRed = kotlin.math.sqrt(redWindow.map { (it - meanRed) * (it - meanRed) }.average())
-            val stdBlue = kotlin.math.sqrt(blueWindow.map { (it - meanBlue) * (it - meanBlue) }.average())
+            val stdGreen = kotlin.math.sqrt(greenWindow.map { (it - meanGreen) * (it - meanGreen) }.average())
 
             // Need both channels to have measurable pulsatile component
-            if (stdRed < 0.01 || stdBlue < 0.001) {
+            // Green channel through finger tissue is small but present (typically 0.01-2.0)
+            if (stdRed < 0.01 || stdGreen < 0.001) {
                 start += stepSamples
                 continue
             }
 
             val ratioRed = stdRed / meanRed
-            val ratioBlue = stdBlue / meanBlue
-            val R = ratioRed / ratioBlue
+            val ratioGreen = stdGreen / meanGreen
+            val R = ratioRed / ratioGreen
 
-            // Sanity check: R should be between 0.3 and 3.0 for valid readings
-            if (R in 0.3..3.0) {
+            // Sanity check: R should be between 0.2 and 3.0 for valid readings
+            if (R in 0.2..3.0) {
                 windowRatios.add(R)
             }
 

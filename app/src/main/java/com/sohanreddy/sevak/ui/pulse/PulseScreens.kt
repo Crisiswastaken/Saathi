@@ -141,8 +141,7 @@ fun PulseLandingScreen(
             shape = RoundedCornerShape(28.dp),
             color = Color.White.copy(alpha = 0.82f),
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.76f)),
-            tonalElevation = 2.dp,
-            shadowElevation = 12.dp
+            tonalElevation = 2.dp
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),

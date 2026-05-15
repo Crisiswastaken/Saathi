@@ -22,7 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.KeyboardArrowDown
+
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -172,7 +172,6 @@ fun MainScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(contentPadding)
     ) {
         // ── Background image ────────────────────────────────────────
         Image(
@@ -243,8 +242,8 @@ fun MainScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding(),
+                .padding(contentPadding)
+                .statusBarsPadding(),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -362,26 +361,27 @@ fun MainScreen(
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
 
-                    // Language grid — 2 columns
-                    ExposedDropdownMenuBox(
-                        expanded = languageMenuExpanded,
-                        onExpandedChange = { languageMenuExpanded = !languageMenuExpanded }
-                    ) {
+                    // Language selector
+                    Box(modifier = Modifier.fillMaxWidth()) {
                         OutlinedTextField(
                             value = selectedLanguage?.let { "${it.displayName}  ${it.englishName}" } ?: "English",
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("Conversation language") },
                             trailingIcon = {
-                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
+                                Icon(
+                                    Icons.Default.Settings,
+                                    contentDescription = null,
+                                    modifier = Modifier.clickable { languageMenuExpanded = !languageMenuExpanded }
+                                )
                             },
                             modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth(),
+                                .fillMaxWidth()
+                                .clickable { languageMenuExpanded = !languageMenuExpanded },
                             shape = RoundedCornerShape(18.dp)
                         )
 
-                        ExposedDropdownMenu(
+                        DropdownMenu(
                             expanded = languageMenuExpanded,
                             onDismissRequest = { languageMenuExpanded = false }
                         ) {
@@ -422,22 +422,7 @@ fun MainScreen(
                             onOpenReports()
                         }
                     )
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = Color(0xFFE7EEF9))
-                    Spacer(Modifier.height(8.dp))
 
-                    Text(
-                        "Sign Out",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                showSheet = false
-                                onSignOut()
-                            }
-                            .padding(vertical = 16.dp),
-                        fontSize = 18.sp,
-                        color = SaathiColors.Error
-                    )
                     Spacer(Modifier.height(32.dp))
                 }
             }
