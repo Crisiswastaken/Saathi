@@ -116,3 +116,7 @@ The UI for the following features has been implemented and now only the function
 3. Both these features are critical for the core functionality of the app, so ensure that the implementation is done correctly and the features are working as intended. Test thoroughly to ensure that there are no bugs or issues with the implementation.
 
 """
+
+"""
+Theres a bug in the radar page, the map is not being displayed and a blank page is being displayed instead. The logs dont show any error either when in the radar page. Go through the codebase, identify the root cause of this issue and fix it appropriately. Use web search mcp if needed to identify the root cause and the fix for this issue.
+"""

@@ -51,6 +51,7 @@ import com.sohanreddy.sevak.map.DiseaseReport
 import com.sohanreddy.sevak.map.DiseaseZone
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // 2-3 km radius ≈ zoom level 14.5
@@ -221,6 +222,20 @@ fun DiseaseMapScreen(
 
     // ── Animate camera to user location ONCE ─────────────────────────────────
     var hasAnimatedToUser by remember { mutableStateOf(false) }
+    var mapLoaded by remember { mutableStateOf(false) }
+    var mapLoadTimedOut by remember { mutableStateOf(false) }
+
+    LaunchedEffect(mapLoaded) {
+        if (!mapLoaded) {
+            mapLoadTimedOut = false
+            delay(8000)
+            if (!mapLoaded) {
+                mapLoadTimedOut = true
+                Log.w("DiseaseMapScreen", "GoogleMap did not report onMapLoaded within timeout")
+            }
+        }
+    }
+
     LaunchedEffect(uiState.userLocation) {
         val loc = uiState.userLocation
         if (!hasAnimatedToUser && loc != null) {
@@ -237,6 +252,11 @@ fun DiseaseMapScreen(
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
+            onMapLoaded = {
+                mapLoaded = true
+                mapLoadTimedOut = false
+                Log.d("DiseaseMapScreen", "GoogleMap loaded successfully")
+            },
             properties = MapProperties(isMyLocationEnabled = false),
             uiSettings = MapUiSettings(
                 myLocationButtonEnabled = false,
@@ -305,11 +325,31 @@ fun DiseaseMapScreen(
         }
 
         // Loading indicator
-        if (uiState.isLoading) {
+        if (uiState.isLoading || !mapLoaded) {
             CircularProgressIndicator(
                 modifier = Modifier.align(Alignment.Center),
-                color = Color.White
+                color = Color(0xFF2E86FF)
             )
+        }
+
+        if (mapLoadTimedOut) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 16.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = Color.Black.copy(alpha = 0.72f),
+                tonalElevation = 0.dp
+            ) {
+                Text(
+                    text = "Map is taking longer than expected. Check network and Google Play services.",
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
 
         // ── "My Location" recenter button ────────────────────────────────
